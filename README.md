@@ -4,6 +4,10 @@
 
 Last Order 鏄?Windows 涓婄殑 coding-agent 宸ヤ綔鍖猴紝涓€涓?manager 瀵规帴鐢ㄦ埛锛孧ission Control 涓ぎ鏈嶅姟绠＄悊鐙珛 worker 浠诲姟銆乵anager 鑷敤澶囨敞鍜屽畬鎴愬洖璋冦€俶anager 鍜岄粯璁?worker 鍙垎鍒€夋嫨 Claude Code銆丆odex銆丏eepSeek Harness 鎴?OpenCode銆?
 褰撳墠鐗堟湰鎻愪緵鍙繍琛岀殑璋冨害绯荤粺涓?TUI銆佸洓绫诲師鐢熷崗璁€傞厤鍣ㄥ拰鑷姩鍖栨祴璇曘€傚簲鐢ㄥ彧杩炴帴閫夊畾鐨勭湡瀹?CLI锛屾部鐢ㄥ叾鐧诲綍涓庢ā鍨嬮厤缃€侰odex 鐨勭湡瀹?manager 鈫?瀹炵幇 worker 鈫?鐙珛楠屾敹 鈫?浜や粯鍒嗘敮闂幆宸茶窇閫氾紱鍏朵粬涓夌被鐨勭湡瀹炴ā鍨嬮棴鐜殏鏈畬鎴愩€?
+## Multi-project workspace
+
+Open a workspace root such as `D:/workspaces`. Last Order scans Git repositories, labels them `-A`, `-B`, and so on, shows up to three projects with `Alt+Up/Down` scrolling, and routes `-A message` or `-B message` to the selected project using Tab completion.
+
 ## 鍚姩
 
 闇€瑕?Node.js **24+**銆丟it锛屼互鍙婂噯澶囦娇鐢ㄧ殑 CLI锛涙部鐢ㄥ悇 CLI 宸叉湁鐨勭櫥褰曚笌妯″瀷閰嶇疆銆傛湰椤圭洰娌℃湁绗笁鏂?npm 杩愯渚濊禆銆?

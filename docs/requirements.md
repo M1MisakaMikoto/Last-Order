@@ -78,6 +78,14 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - Codex revert 只修改对话历史，文件恢复由 Last Order checkpoint 负责。
 - Claude Code、OpenCode 和 DSH 按各自原生能力继续接入。
 
+## Multi-Project Workspace
+
+- 打开一个工作区根目录时，Last Order 自动扫描最多三层的 Git 仓库并分配 A、B、C 等项目编号。
+- 顶部项目列表最多显示三行，可用 Alt+↑/↓ 滚动；当前项目带 `*` 标记。
+- 输入 `-A`/`-B` 或 `-A message` 切换或路由到对应项目，项目前缀支持 Tab 智能补全。
+- 每个项目使用独立的 Mission Control、Manager、Worker 和配置；项目服务按需启动，切换后仍可并行运行。
+- 单项目路径继续兼容；非 Git 项目目录在直接作为 --project 使用时仍可自动初始化。
+
 ## Unified Skills
 
 - Last Order 维护 provider-neutral Skill Registry，扫描 repo/user 下的 `.agents/skills`、`.claude/skills`、`.codex/skills` 以及 Codex system skills。

@@ -63,6 +63,28 @@ function workspaceRoot() {
   return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
 }
 
+async function resolveRepositoryRoot(root = workspaceRoot()) {
+  if (!root) return undefined;
+  try {
+    return (await execFile('git', ['rev-parse', '--show-toplevel'], { cwd: root })).stdout.trim();
+  } catch {}
+  const skip = new Set(['.git', '.tmp', 'node_modules', 'vendor', 'coverage', 'dist', 'build', '.next', '.venv']);
+  async function visit(directory, depth) {
+    try {
+      if (fs.existsSync(path.join(directory, '.git'))) return directory;
+      if (depth >= 3) return undefined;
+      const entries = (await fsp.readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+      for (const entry of entries) {
+        if (!entry.isDirectory() || skip.has(entry.name)) continue;
+        const found = await visit(path.join(directory, entry.name), depth + 1);
+        if (found) return found;
+      }
+    } catch {}
+    return undefined;
+  }
+  return visit(root, 0);
+}
+
 async function dataDirectory(root) {
   const common = (await execFile('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root })).stdout.trim();
   return path.join(common, 'last-order');
@@ -142,8 +164,10 @@ async function ensureClient() {
   if (client) {
     try { await client.health(); return client; } catch { client = undefined; }
   }
-  const root = workspaceRoot();
-  if (!root) throw new Error('Open a project folder before starting Last Order');
+  const workspace = workspaceRoot();
+  if (!workspace) throw new Error('Open a project folder before starting Last Order');
+  const root = await resolveRepositoryRoot(workspace);
+  if (!root) throw new Error('No Git repository found in the opened workspace');
   const existing = await readControlInfo(root);
   if (existing) {
     const candidate = new ControlClient(existing);
@@ -418,7 +442,7 @@ class ManagerTuiViewProvider {
     host.stdout.on('data', chunk => this.view?.webview.postMessage({ type: 'output', data: chunk.toString() }));
     host.stderr.on('data', chunk => output.append(chunk.toString()));
     host.on('message', message => {
-      if (message.type === 'openMonitor') void openMonitor(message.worker);
+      if (message.type === 'openMonitor') void openMonitor(message.worker, message);
       if (message.type === 'disconnected') this.view?.webview.postMessage({ type: 'exit', message: 'Last Order backend disconnected.' });
     });
     host.on('exit', code => {
@@ -725,10 +749,12 @@ async function sendContext(target) {
   await refreshState();
 }
 
-async function openMonitor(worker) {
+async function openMonitor(worker, projectInfo) {
   worker = worker || await pickWorker('Open worker monitor');
   if (!worker) return;
-  const status = lastStatus || await refreshState();
+  const status = projectInfo?.dataDirectory
+    ? { project_root: projectInfo.project, data_directory: projectInfo.dataDirectory }
+    : lastStatus || await refreshState();
   const script = backendFile('bin/worker-monitor.js');
   const terminal = vscode.window.createTerminal({ name: `LO ${worker.id}`, cwd: status.project_root, location: { viewColumn: vscode.ViewColumn.Beside } });
   terminal.show();

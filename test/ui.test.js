@@ -234,6 +234,38 @@ test('top status distinguishes foreground conversation, background work and mana
   assert.match(frame, /1 个任务待处理/);
 });
 
+test('project list shows a three-row window, scrolls, and routes -A/-B prefixes', async () => {
+  const { ui, service } = navigationUI();
+  const projects = ['A', 'B', 'C', 'D'].map((code, index) => ({ code, root: `D:/workspaces/p${index + 1}`, active: index === 0 }));
+  service.projects = projects.map(project => ({ ...project }));
+  const switched = [], sent = [];
+  service.switchProject = async code => {
+    const project = service.projects.find(item => item.code === code);
+    service.projects.forEach(item => { item.active = item.code === code; });
+    switched.push(code);
+    return { code, root: project.root };
+  };
+  service.routeInput = text => {
+    const match = /^-([A-Za-z]{1,2})(?:\s+([\s\S]*))?$/.exec(text);
+    return match ? { project: match[1], text: match[2] ?? '' } : { project: null, text };
+  };
+  service.sendManagerMessage = async text => sent.push(text);
+  let frame = ui.frame(100, 24).join('\n');
+  assert.match(frame, /-\[A\] D:\/workspaces\/p1/);
+  assert.match(frame, /-\[B\] D:\/workspaces\/p2/);
+  assert.match(frame, /-\[C\] D:\/workspaces\/p3/);
+  assert.doesNotMatch(frame, /-\[D\] D:\/workspaces\/p4/);
+  await ui.key('', { name: 'down', meta: true });
+  frame = ui.frame(100, 24).join('\n');
+  assert.doesNotMatch(frame, /-\[A\] D:\/workspaces\/p1/);
+  assert.match(frame, /-\[D\] D:\/workspaces\/p4/);
+  ui.input = '-C next task';
+  await ui.key('', { name: 'return' });
+  assert.deepEqual(switched, ['C']);
+  assert.deepEqual(sent, ['next task']);
+  assert.match(ui.notice, /当前项目 -\[C\]/);
+});
+
 test('application mouse selection refreshes during drag, filters borders, and copies with Ctrl+C', async () => {
   const copied = [];
   const { ui } = navigationUI();

@@ -45,12 +45,19 @@ export class GitWorkspace {
     }
     if (!info.isDirectory()) throw new Error(`项目路径不是目录：${directory}`);
     let root;
-    try { root = (await capture('git', ['rev-parse', '--show-toplevel'], { cwd: directory })).trim(); } catch (error) {
-      if (!/not a git repository/i.test(error.message)) throw error;
-      if (!initializeEmpty) throw new Error(`项目尚未初始化 Git：${directory}\n可使用 --project 启动 Last Order 自动初始化。`);
+    let localRepository = false;
+    try { await access(path.join(directory, '.git')); localRepository = true; } catch {}
+    if (!localRepository && initializeEmpty) {
       await capture('git', ['init', '-b', 'main'], { cwd: directory });
       await createEmptyBaseline(directory);
-      root = (await capture('git', ['rev-parse', '--show-toplevel'], { cwd: directory })).trim();
+      localRepository = true;
+    }
+    if (!localRepository) {
+      throw new Error(`项目尚未初始化 Git：${directory}\n可使用 --project 启动 Last Order 自动初始化。`);
+    }
+    try { root = (await capture('git', ['rev-parse', '--show-toplevel'], { cwd: directory })).trim(); } catch (error) {
+      if (!/not a git repository/i.test(error.message)) throw error;
+      throw new Error(`项目尚未初始化 Git：${directory}\n可使用 --project 启动 Last Order 自动初始化。`);
     }
     try { await capture('git', ['rev-parse', '--verify', 'HEAD'], { cwd: root }); } catch {
       if (!initializeEmpty) throw new Error(`Git 仓库尚无可用的初始提交：${root}\n可使用 --project 启动 Last Order 自动建立空基线。`);

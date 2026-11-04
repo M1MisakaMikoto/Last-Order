@@ -46,6 +46,17 @@ export function fileQuery(input) {
 }
 
 export function commandCompletions(input, context = {}) {
+  if (/^-[A-Za-z]{0,2}$/.test(input)) {
+    const prefix = input.slice(1).toLowerCase();
+    const items = (context.projects ?? [])
+      .filter(project => project.code.toLowerCase().startsWith(prefix))
+      .map(project => ({
+        value: '-' + project.code + ' ',
+        label: '-[' + project.code + ']',
+        description: project.root + (project.active ? ' · 当前项目' : '')
+      }));
+    return { items, hint: items.length ? '↑↓ 选择项目 · Tab 填入 · Esc 收起' : '没有匹配的项目' };
+  }
   if (input.includes('$')) {
     const skillMatch = /^(.*?)\$([^\s]*)$/s.exec(input);
     if (!skillMatch) return { items: [], hint: '' };

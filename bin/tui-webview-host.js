@@ -2,9 +2,11 @@
 import { parseArgs } from 'node:util';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
-import { capture } from '../src/core/process.js';
+import { GitWorkspace } from '../src/core/git.js';
 import { attachOrStartMissionControl, ServiceClient } from '../src/core/control-client.js';
-import { saveConfig } from '../src/core/config.js';
+import { loadConfig, normalizeConfig, saveConfig } from '../src/core/config.js';
+import { discoverGitRepositories } from '../src/core/projects.js';
+import { MultiProjectService } from '../src/core/multi-project-service.js';
 import { TerminalUI } from '../src/ui.js';
 
 const { values } = parseArgs({
@@ -14,42 +16,56 @@ const { values } = parseArgs({
     rows: { type: 'string', default: '30' }
   }
 });
-const project = path.resolve(values.project ?? '.');
-const common = (await capture('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: project })).trim();
-const dataDirectory = path.join(common, 'last-order');
-const info = await attachOrStartMissionControl(project, dataDirectory);
-const client = new ServiceClient(info);
-await client.start();
+const workspace = path.resolve(values.project ?? '.');
+const repositories = await discoverGitRepositories(workspace);
+if (!repositories.length) throw new Error(`No Git repositories found under ${workspace}`);
+
+const hub = new MultiProjectService(repositories, async project => {
+  const git = await GitWorkspace.open(project.root, { initializeEmpty: true });
+  const configPath = path.join(git.directory, 'config.json');
+  const saved = await loadConfig(configPath);
+  const config = normalizeConfig(saved, {});
+  await saveConfig(configPath, config);
+  const info = await attachOrStartMissionControl(git.root, git.directory);
+  const client = new ServiceClient(info);
+  await client.start();
+  project.saveSettings = next => saveConfig(configPath, next);
+  return { client, dataDirectory: git.directory, configPath };
+});
+await hub.start();
+
 let stopped = false;
 let ui;
-
 const cleanup = async () => {
   if (stopped) return;
   stopped = true;
   ui?.stop();
-  client.stop();
+  await hub.stop();
 };
 const stop = async code => {
   await cleanup();
   process.exit(code);
 };
 
-client.on('disconnect', () => {
+hub.on('disconnect', () => {
   process.send?.({ type: 'disconnected' });
   void stop(0);
 });
 process.on('SIGINT', () => void stop(0));
 process.on('SIGTERM', () => void stop(0));
 
-ui = new TerminalUI(client, {
+ui = new TerminalUI(hub, {
   virtualTerminal: true,
   virtualSize: { columns: Number(values.columns), rows: Number(values.rows) },
-  settings: client.config,
-  saveSettings: next => saveConfig(path.join(dataDirectory, 'config.json'), next),
-  openMonitor: worker => process.send?.({ type: 'openMonitor', worker }),
+  settings: hub.config,
+  saveSettings: next => hub.saveSettings(next),
+  openMonitor: worker => process.send?.({
+    type: 'openMonitor', worker,
+    project: hub.activeProject.root, dataDirectory: hub.activeProject.dataDirectory
+  }),
   quit: () => void stop(0),
   reload: async () => {
-    await client.shutdown().catch(() => {});
+    await hub.shutdown().catch(() => {});
     process.send?.({ type: 'reload' });
     await stop(42);
   }

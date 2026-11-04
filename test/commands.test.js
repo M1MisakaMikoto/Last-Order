@@ -35,6 +35,15 @@ test('installed skills provide contextual completions', () => {
   assert.equal(commandCompletions('请使用 $py', { skills }).items[0].value, '请使用 $pytest ');
 });
 
+test('project prefixes provide contextual -A/-B completions', () => {
+  const projects = [
+    { code: 'A', root: 'D:/workspaces/alpha', active: false },
+    { code: 'B', root: 'D:/workspaces/beta', active: true }
+  ];
+  assert.deepEqual(commandCompletions('-', { projects }).items.map(item => item.value), ['-A ', '-B ']);
+  assert.deepEqual(commandCompletions('-b', { projects }).items.map(item => item.value), ['-B ']);
+});
+
 test('file completion supports Windows separators, Unicode and spaces while excluding symlinks', () => {
   const context = { files: [{ name: '中文 页面.html' }, { name: 'nested', directory: true }, { name: 'outside', symlink: true }] };
   assert.equal(commandCompletions('/open src\\中', context).items[0].value, '/open src/中文 页面.html');

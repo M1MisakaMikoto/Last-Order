@@ -60,6 +60,7 @@ export class TerminalUI {
     this.selection = null; this.lastFrameLines = []; this.lastSize = { columns: 80, rows: 24 }; this.lastConversationView = null;
     this.selectionAutoTimer = null; this.selectionEdge = 0; this.selectionPointer = null; this.renderDelay = 50;
     this.showArchivedOnce = false;
+    this.projectScroll = 0;
    
   }
   get allWorkers() { return Object.values(this.service.state.workers); }
@@ -178,7 +179,8 @@ export class TerminalUI {
       groups: /^\/(?:expand|collapse)\s/.test(this.input) && this.conversationActor ? conversationGroups(this.service.store.history(this.conversationActor)).filter(g => g.kind === 'background') : [],
       files: files?.entries, fileHint: query ? !this.worker?.workspace ? '需先选择已有工作区的 worker' : files?.error ?? (files ? '' : '正在读取目录…') : '',
       skills: this.skillCompletion?.actor === (this.conversationActor || 'manager') ? this.skillCompletion.entries : [],
-      skillHint: this.skillCompletion?.error
+      skillHint: this.skillCompletion?.error,
+      projects: this.service.projects ?? [{ code: '-', root: this.service.git?.root ?? '', active: true }]
     });
     this.completionIndex = Math.min(this.completionIndex, Math.max(0, result.items.length - 1));
     return { ...result, active: this.input.startsWith('/') && this.dismissedCompletion !== this.input, open: result.items.length > 0 && this.dismissedCompletion !== this.input };
@@ -509,6 +511,19 @@ export class TerminalUI {
   async switchScreen() {
     await this.showPanel(this.screen === 'manager' ? this.workerPanel : 'manager');
   }
+  async switchProject(selector) {
+    if (typeof this.service.switchProject !== 'function') throw new Error('This session supports only one project');
+    const project = await this.service.switchProject(selector);
+    this.settings = { ...DEFAULT_CONFIG, ...this.service.config };
+    this.selected = 0; this.showArchivedOnce = false;
+    this.history = []; this.historyIndex = 0; this.historyDraft = '';
+    this.scrollViews.clear(); this.expandedActors.clear(); this.expandedGroups.clear(); this.collapsedGroups.clear();
+    const active = (this.service.projects ?? []).findIndex(item => item.active);
+    this.projectScroll = Math.max(0, Math.min(active - 1, (this.service.projects?.length ?? 1) - 3));
+    this.panel = 'manager'; this.screen = 'manager';
+    this.notice = `当前项目 -[${project.code}] ${project.root}`;
+    this.render();
+  }
   navigateHistory(direction) {
     if (!this.history.length) return;
     if (this.historyIndex >= this.history.length) this.historyDraft = this.input;
@@ -518,6 +533,11 @@ export class TerminalUI {
   }
   async key(text, key = {}) {
     if (this.stopped) return;
+    if ((key.meta || key.alt) && ['up', 'down'].includes(key.name)) {
+      const count = this.service.projects?.length ?? 1;
+      this.projectScroll = Math.max(0, Math.min(this.projectScroll + (key.name === 'up' ? -1 : 1), Math.max(0, count - 3)));
+      this.render(); return;
+    }
     if (key.ctrl && key.name === 'tab') {
       await this.switchScreen();
       this.render();
@@ -632,7 +652,17 @@ export class TerminalUI {
   }
   async command(text) {
     this.notice = '';
-    if (!text.startsWith('/')) { if (this.panel === 'manager') this.scrollTo('bottom'); await this.service.sendManagerMessage(text); return; }
+    if (!text.startsWith('/')) {
+      const routed = this.service.routeInput?.(text);
+      if (routed?.project) {
+        await this.switchProject(routed.project);
+        if (routed.text) await this.service.sendManagerMessage(routed.text);
+        return;
+      }
+      if (this.panel === 'manager') this.scrollTo('bottom');
+      await this.service.sendManagerMessage(text);
+      return;
+    }
     const [command, ...parts] = text.slice(1).split(' '); const args = parts.join(' ').trim();
     if (command === 'quit') return this.options.quit();
     if (command === 'shutdown') {
@@ -1078,14 +1108,23 @@ export class TerminalUI {
     const queued = (state.manager.pending ?? []).filter(item => !active.has(item.id)).length;
     const status = `Manager ${managerState} · ${queued} 个任务待处理 · ${activeWorkers} 个 Worker 正在工作`;
     const hint = this.screen === 'manager'
-      ? compact ? '↑↓ 历史 · Ctrl+↑↓ 滚动 · Shift+↑↓ 顶/底 · Ctrl+Tab · /help' : '↑↓ 历史 · Ctrl+↑↓ 滚动 · Shift+↑↓ 顶部/底部 · PgUp/PgDn · Ctrl+Tab · F5 · /help'
-      : compact ? 'F6 焦点 · ↑↓ 选择/滚动 · Ctrl+↑↓ 滚动 · Ctrl+Tab · /help' : 'F6 焦点 · ↑↓ 选择/滚动 · Ctrl+↑↓/PgUp/PgDn 滚详情 · Shift+↑↓ 顶部/底部 · Ctrl+Tab · /help';
+      ? compact ? '↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 滚动 · Ctrl+Tab · /help' : '↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 滚动 · Shift+↑↓ 顶部/底部 · PgUp/PgDn · Ctrl+Tab · F5 · /help'
+      : compact ? 'F6 焦点 · ↑↓ 选择/滚动 · Alt+↑↓ 项目 · Ctrl+Tab · /help' : 'F6 焦点 · ↑↓ 选择/滚动 · Ctrl+↑↓/PgUp/PgDn 滚详情 · Shift+↑↓ 顶部/底部 · Alt+↑↓ 项目 · Ctrl+Tab · /help';
     const lines = [fit(`${PRODUCT_NAME} · ${this.screen === 'manager' ? 'Manager' : 'Workers'}`, columns)];
     const add = (label, value) => {
       if (tiny) lines.push(compactLabeledLine(label, value, columns));
       else lines.push(...labeledLines(label, value, columns));
     };
-    add('项目', tiny ? tail(this.service.git.root, Math.max(8, columns - 10)) : this.service.git.root);
+    const projects = this.service.projects ?? [{ code: '', root: this.service.git?.root ?? '', active: true }];
+    this.projectScroll = Math.max(0, Math.min(this.projectScroll, Math.max(0, projects.length - 3)));
+    const windowProjects = projects.slice(this.projectScroll, this.projectScroll + 3);
+    for (let index = 0; index < windowProjects.length; index++) {
+      const project = windowProjects[index];
+      const label = index === 0 ? '项目' : '    ';
+      const value = `${project.code ? `-[${project.code}] ` : ''}${tiny ? tail(project.root, Math.max(8, columns - 12)) : project.root}${project.active ? ' *' : ''}`;
+      if (tiny) lines.push(compactLabeledLine(label, value, columns));
+      else lines.push(...labeledLines(label, value, columns));
+    }
     add('状态', status);
     if (this.settings.showShortcutHints) add('提示', hint);
     lines.push('─'.repeat(columns));
