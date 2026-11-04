@@ -1,0 +1,11 @@
+export const PRODUCT_NAME = 'Last Order';
+export const PRODUCT_SLUG = 'last-order';
+export const PRODUCT_COMPACT_NAME = 'LastOrder';
+export const LEGACY_PRODUCT_SLUG = 'lastorder';
+export const SERVICE_NAME = 'Mission Control';
+export const DATA_DIRECTORY_NAME = 'last-order';
+export const LEGACY_DATA_DIRECTORY_NAME = 'lastorder';
+export const WORKTREE_DIRECTORY_NAME = '.last-order-workspaces';
+export const LEGACY_WORKTREE_DIRECTORY_NAME = '.lastorder-workspaces';
+export const BRANCH_PREFIX = 'last-order';
+export const LEGACY_BRANCH_PREFIX = 'lastorder';

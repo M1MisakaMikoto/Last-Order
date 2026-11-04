@@ -1,0 +1,44 @@
+{
+  "provider": "codex",
+  "scenario": "task",
+  "startedAt": "2026-11-02T10:19:35.990Z",
+  "project": "D:\\workspaces\\SA\\.tmp\\live-codex-BwqABU\\project",
+  "realModelCalls": true,
+  "cases": [
+    {
+      "input": "hello，帮我完成一个实际代码任务：在当前测试仓库新增 src/sum.js，实现 export function sum(values)。空数组返回 0；仅接受有限数值组成的数组；其他输入抛出 TypeError；不能修改输入数组。添加 node:test 测试。实现和对抗性验收分给不同 worker，manager 只负责调度；验收 worker 不得修改实现代码。请实际实现并验证，交付到本次需求分支，不合入 main。",
+      "status": "passed",
+      "pipelineCount": 1,
+      "workerCount": 2,
+      "stages": [
+        {
+          "kind": "implement",
+          "status": "succeeded"
+        },
+        {
+          "kind": "review",
+          "status": "succeeded"
+        }
+      ],
+      "deliveredBranch": "sa/delivery/request_2ddbaaae",
+      "commit": "65d69e1a79a7e20c0f340c4d28bd6279d2970725",
+      "externalAssertions": "passed"
+    }
+  ],
+  "approvals": [
+    {
+      "id": "approval_e2d3f8ba",
+      "actor": "worker_fbba89e4",
+      "allowed": true
+    },
+    {
+      "id": "approval_3df2fa9a",
+      "actor": "worker_fbba89e4",
+      "allowed": true
+    }
+  ],
+  "status": "passed",
+  "finishedAt": "2026-11-02T10:24:41.853Z",
+  "workerCount": 2,
+  "pipelineCount": 1
+}

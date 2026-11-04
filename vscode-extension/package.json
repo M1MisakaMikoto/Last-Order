@@ -1,0 +1,281 @@
+{
+  "name": "last-order-vscode",
+  "displayName": "Last Order",
+  "description": "Last Order VSCode client for workers and manager",
+  "version": "0.1.36",
+  "publisher": "local",
+  "private": true,
+  "engines": {
+    "vscode": "^1.94.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:missionControl.workers",
+    "onView:missionControl.manager",
+    "onCommand:missionControl.start",
+    "onCommand:missionControl.stop",
+    "onCommand:missionControl.refresh",
+    "onCommand:missionControl.openTui",
+    "onCommand:missionControl.openManager",
+    "onCommand:missionControl.openWorker",
+    "onCommand:missionControl.openWorkerDiff",
+    "onCommand:missionControl.editWorkerNotes",
+    "onCommand:missionControl.takeOverWorker",
+    "onCommand:missionControl.handBackWorker",
+    "onCommand:missionControl.openWorkerWorktree",
+    "onCommand:missionControl.openMonitor",
+    "onCommand:missionControl.sendContext",
+    "onCommand:missionControl.createCheckpoint",
+    "onCommand:missionControl.restoreCheckpoint",
+    "onCommand:missionControl.switchScreen",
+    "onCommand:missionControl.archiveWorker"
+  ],
+  "main": "./extension.js",
+  "scripts": {
+    "prepare:backend": "node scripts/prepare-backend.mjs",
+    "package": "npm run prepare:backend && npx --yes @vscode/vsce package --allow-missing-repository --skip-license"
+  },
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "missionControl",
+          "title": "Last Order",
+          "icon": "media/last-order-forest.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "missionControlManager",
+          "title": "Last Order",
+          "icon": "media/last-order-forest.svg"
+        }
+      ]
+    },
+    "views": {
+      "missionControl": [
+        {
+          "id": "missionControl.workers",
+          "name": "Workers",
+          "contextualTitle": "Last Order"
+        }
+      ],
+      "missionControlManager": [
+        {
+          "id": "missionControl.manager",
+          "name": "Manager",
+          "type": "webview"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "missionControl.workers",
+        "contents": "Last Order is not running for this workspace.\n[Start Last Order](command:missionControl.start)"
+      }
+    ],
+    "commands": [
+      {
+        "command": "missionControl.start",
+        "title": "Last Order: Start"
+      },
+      {
+        "command": "missionControl.stop",
+        "title": "Last Order: Stop"
+      },
+      {
+        "command": "missionControl.refresh",
+        "title": "Last Order: Refresh"
+      },
+      {
+        "command": "missionControl.openTui",
+        "title": "Last Order: Open Control TUI"
+      },
+      {
+        "command": "missionControl.openManager",
+        "title": "Last Order: Open Manager"
+      },
+      {
+        "command": "missionControl.openWorker",
+        "title": "Last Order: Open Worker"
+      },
+      {
+        "command": "missionControl.openWorkerDiff",
+        "title": "Last Order: Open Worker Diff"
+      },
+      {
+        "command": "missionControl.editWorkerNotes",
+        "title": "Last Order: Edit Worker Notes"
+      },
+      {
+        "command": "missionControl.takeOverWorker",
+        "title": "Last Order: Take Over Worker"
+      },
+      {
+        "command": "missionControl.handBackWorker",
+        "title": "Last Order: Hand Worker Back"
+      },
+      {
+        "command": "missionControl.openWorkerWorktree",
+        "title": "Last Order: Open Worker Worktree"
+      },
+      {
+        "command": "missionControl.openMonitor",
+        "title": "Last Order: Open Worker Monitor"
+      },
+      {
+        "command": "missionControl.sendContext",
+        "title": "Last Order: Send Editor Context"
+      },
+      {
+        "command": "missionControl.createCheckpoint",
+        "title": "Last Order: Create Checkpoint"
+      },
+      {
+        "command": "missionControl.restoreCheckpoint",
+        "title": "Last Order: Restore Checkpoint"
+      },
+      {
+        "command": "missionControl.switchScreen",
+        "title": "Last Order: Switch Manager/Workers"
+      },
+      {
+        "command": "missionControl.archiveWorker",
+        "title": "Last Order: Archive Worker"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "missionControl.switchScreen",
+        "key": "ctrl+tab",
+        "when": "missionControl.managerFocus || webviewId == missionControl.manager || webviewId == missionControl.workers || focusedView == missionControl.manager || focusedView == missionControl.workers || activeWebviewPanelId == missionControl.manager"
+      },
+      {
+        "command": "missionControl.switchScreen",
+        "key": "ctrl+shift+tab",
+        "when": "missionControl.managerFocus || webviewId == missionControl.manager || webviewId == missionControl.workers || focusedView == missionControl.manager || focusedView == missionControl.workers || activeWebviewPanelId == missionControl.manager"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "missionControl.start",
+          "when": "view == missionControl.workers",
+          "group": "navigation@1"
+        },
+        {
+          "command": "missionControl.openTui",
+          "when": "view == missionControl.workers",
+          "group": "navigation@2"
+        },
+        {
+          "command": "missionControl.refresh",
+          "when": "view == missionControl.workers",
+          "group": "navigation@3"
+        },
+        {
+          "command": "missionControl.stop",
+          "when": "view == missionControl.workers",
+          "group": "navigation@4"
+        },
+        {
+          "command": "missionControl.createCheckpoint",
+          "when": "view == missionControl.workers",
+          "group": "navigation@5"
+        },
+        {
+          "command": "missionControl.restoreCheckpoint",
+          "when": "view == missionControl.workers",
+          "group": "navigation@6"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "missionControl.openWorkerDiff",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@1"
+        },
+        {
+          "command": "missionControl.openWorkerWorktree",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@2"
+        },
+        {
+          "command": "missionControl.openMonitor",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@3"
+        },
+        {
+          "command": "missionControl.sendContext",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@4"
+        },
+        {
+          "command": "missionControl.editWorkerNotes",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@5"
+        },
+        {
+          "command": "missionControl.takeOverWorker",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@6"
+        },
+        {
+          "command": "missionControl.handBackWorker",
+          "when": "viewItem == missionControl.worker",
+          "group": "navigation@7"
+        },
+        {
+          "command": "missionControl.archiveWorker",
+          "when": "viewItem == missionControl.worker",
+          "group": "1_worker@9"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Last Order",
+      "properties": {
+        "missionControl.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Start Last Order when the Last Order view activates."
+        },
+        "missionControl.autoOpenManager": {
+          "type": "boolean",
+          "default": true,
+          "description": "Focus the Last Order Manager view after activation."
+        },
+        "missionControl.autoOpenTui": {
+          "type": "boolean",
+          "default": false,
+          "description": "Open the full Last Order TUI in the integrated terminal when the extension activates."
+        },
+        "missionControl.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Node executable used to start the Last Order backend. Empty uses the extension host Node executable."
+        },
+        "missionControl.serviceScript": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to bin/mission-control.js. Empty resolves the development repository layout."
+        },
+        "missionControl.keepRunningOnDeactivate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Keep an extension-started Last Order backend running after this VSCode window deactivates."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0"
+  }
+}

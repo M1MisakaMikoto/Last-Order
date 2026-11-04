@@ -1,0 +1,115 @@
+const cellWidth = char => /\p{Mark}/u.test(char) ? 0
+  : /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1faff}]/u.test(char) ? 2 : 1;
+
+export function stripFormatting(text) {
+  return String(text ?? '')
+    .replace(/\x1b\]8;;.*?(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+}
+
+export function styledWidth(text) {
+  return Array.from(stripFormatting(text)).reduce((sum, char) => sum + cellWidth(char), 0);
+}
+
+function safeLink(url) {
+  const value = String(url ?? '').trim();
+  if (/^(?:https?:\/\/|mailto:)/i.test(value)) return value.replace(/[\x00-\x20\x7f]/g, encodeURIComponent);
+  if (value && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !/[\x00-\x1f\x7f]/.test(value)) return value;
+  return '';
+}
+
+function inlineSegments(text, base = {}) {
+  const segments = [], pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  let last = 0, match;
+  while ((match = pattern.exec(text))) {
+    if (match.index > last) segments.push({ ...base, text: text.slice(last, match.index) });
+    if (match[2] !== undefined) {
+      const link = safeLink(match[3]);
+      segments.push({ ...base, text: match[2], link: link || null, underline: Boolean(link) });
+    } else if (match[4] !== undefined) segments.push({ ...base, text: match[4], code: true });
+    else if (match[5] !== undefined) segments.push({ ...base, text: match[5], bold: true });
+    else if (match[6] !== undefined) segments.push({ ...base, text: match[6], italic: true });
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) segments.push({ ...base, text: text.slice(last) });
+  return segments;
+}
+
+function styleSegment(segment, text) {
+  if (!text) return '';
+  const prefix = [];
+  if (segment.link) prefix.push(`\x1b]8;;${segment.link}\x1b\\`);
+  if (segment.bold) prefix.push('\x1b[1m');
+  if (segment.italic) prefix.push('\x1b[3m');
+  if (segment.underline) prefix.push('\x1b[4m');
+  if (segment.code) prefix.push('\x1b[36m');
+  if (segment.dim) prefix.push('\x1b[2m');
+  const suffix = (prefix.length ? '\x1b[0m' : '') + (segment.link ? '\x1b]8;;\x1b\\' : '');
+  return prefix.join('') + text + suffix;
+}
+
+function wrapSegments(segments, columns) {
+  const lines = [];
+  let current = [], used = 0;
+  const push = () => { lines.push(current); current = []; used = 0; };
+  for (const segment of segments) {
+    let chunk = '';
+    for (const char of segment.text) {
+      const size = cellWidth(char);
+      if (used + size > columns && (current.length || chunk)) {
+        if (chunk) current.push({ ...segment, text: chunk });
+        push(); chunk = '';
+      }
+      chunk += char; used += size;
+    }
+    if (chunk) current.push({ ...segment, text: chunk });
+  }
+  if (current.length || !lines.length) push();
+  return lines.map(line => line.map(segment => styleSegment(segment, segment.text)).join(''));
+}
+
+function indentContinuation(segments, prefix, columns) {
+  const first = wrapSegments(segments, Math.max(1, columns - cellWidth(prefix)));
+  return first.map((line, index) => (index ? ' '.repeat(Math.min(columns, Array.from(prefix).reduce((sum, char) => sum + cellWidth(char), 0))) : prefix) + line);
+}
+
+export function renderMarkdown(text, columns = 80) {
+  columns = Math.max(1, columns);
+  const source = stripFormatting(text).replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
+  const output = [];
+  let fenced = false, language = '';
+  for (const raw of source.split('\n')) {
+    if (/^\s*```/.test(raw)) {
+      if (!fenced) {
+        fenced = true; language = raw.trim().slice(3).trim();
+        output.push(styleSegment({ dim: true }, '┌─ ' + (language || 'code')));
+      } else {
+        fenced = false;
+        output.push(styleSegment({ dim: true }, '└─'));
+      }
+      continue;
+    }
+    if (fenced) {
+      for (const line of wrapSegments([{ text: raw || ' ' }], Math.max(1, columns - 2))) output.push(styleSegment({ dim: true }, '│ ') + line);
+      continue;
+    }
+    if (!raw.trim()) { output.push(''); continue; }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(raw);
+    if (heading) {
+      output.push(...wrapSegments([{ text: heading[2], bold: true, underline: heading[1].length <= 2 }], columns));
+      continue;
+    }
+    if (/^\s*(?:---|\*\*\*|___)\s*$/.test(raw)) { output.push('─'.repeat(columns)); continue; }
+    const quote = /^>\s?(.*)$/.exec(raw);
+    if (quote) { output.push(...indentContinuation(inlineSegments(quote[1], { dim: true }), '│ ', columns)); continue; }
+    const list = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(raw);
+    if (list) {
+      const prefix = list[1] + (/\d/.test(list[2]) ? list[2] : '•') + ' ';
+      output.push(...indentContinuation(inlineSegments(list[3]), prefix, columns));
+      continue;
+    }
+    output.push(...wrapSegments(inlineSegments(raw), columns));
+  }
+  return output;
+}

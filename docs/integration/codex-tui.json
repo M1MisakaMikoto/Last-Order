@@ -1,0 +1,19 @@
+{
+  "provider": "codex",
+  "mode": "real TUI",
+  "input": "hello",
+  "status": "passed",
+  "workerCount": 2,
+  "activeWorkers": 0,
+  "pipelineCount": 1,
+  "newWorkers": 0,
+  "newPipelines": 0,
+  "replies": [
+    "你好！有什么需要我帮忙的？"
+  ],
+  "serviceLockRemoved": true,
+  "exitProbe": {
+    "code": 0,
+    "signal": null
+  }
+}
