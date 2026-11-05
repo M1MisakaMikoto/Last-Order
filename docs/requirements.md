@@ -112,6 +112,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 - Worker 列表默认隐藏已归档 worker；`/workers all` 一次性显示全部 worker，返回 Manager 后恢复默认隐藏。
 - `/archive [worker_id]` 允许用户手动归档已停止 worker；归档后禁止 message、resume、retry，并保留历史、结果、commit 和证据。
+- Manager 仍可通过 `inspect` 和 `inspect_worker_history` 读取已归档 Worker 的事件历史与证据；归档仅禁止继续执行。
 - Worker 不会自动归档。
 - 默认无自定义 staff 指导时，Manager 亲自处理需求澄清、范围协商、歧义消解、用户决策、验收标准和持续交互；自包含的探索、明确需求实现、独立审查、验证和集成交给 Worker。
 - Manager 在 worker 完成后必须询问用户是归档该 worker 还是提供新需求；只有用户明确确认后才能调用 `archive_worker`。

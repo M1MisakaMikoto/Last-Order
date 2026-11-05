@@ -540,6 +540,7 @@ test('stopped workers can be manually archived and archived workers are read-onl
   service.state.workers.w1 = { id: 'w1', pipelineId: 'p1', status: 'succeeded', title: 'Finished', epoch: 1 };
   service.state.workers.w2 = { id: 'w2', pipelineId: 'p1', status: 'running', title: 'Running', epoch: 1 };
   await assert.rejects(service.archiveWorker('w2', 'user', 'user'), /only stopped workers/);
+  service.log('w1', 'assistant', 'archived worker evidence');
   const result = await service.archiveWorker('w1', 'finished', 'user');
   assert.equal(result.worker_id, 'w1');
   assert.ok(service.state.workers.w1.archivedAt);
@@ -548,6 +549,13 @@ test('stopped workers can be manually archived and archived workers are read-onl
   await assert.rejects(service.sendWorkerMessage('w1', 'continue'), /archived/);
   await assert.rejects(service.controlWorker('w1', 'retry'), /archived/);
   await assert.rejects(service.startWorker({ title: 'Next', prompt: 'Next', input_worker_id: 'w1' }), /archived/);
+  const inspected = await service.invoke('manager', service.state.manager.epoch, 'inspect', { id: 'w1' });
+  assert.equal(inspected.worker.archivedAt, service.state.workers.w1.archivedAt);
+  assert.ok(inspected.recentEvents.some(event => event.data.text === 'archived worker evidence'));
+  const history = await service.invoke('manager', service.state.manager.epoch, 'inspect_worker_history', {
+    worker_id: 'w1', limit: 20
+  });
+  assert.ok(history.events.some(event => event.data.text === 'archived worker evidence'));
 });
 
 test('manager can archive a stopped worker only through the explicit archive tool', async t => {

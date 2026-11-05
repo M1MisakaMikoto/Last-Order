@@ -17,7 +17,7 @@ export const MANAGER_TOOLS = [
   }, ['worker_id']),
   tool('remember_manager_guidance', 'Append a durable user-requested habit, work standard or workflow to the manager AGENTS.md memory. Use only when the user asks you to remember it. This does not modify project files.', { text: string }, ['text']),
   tool('inspect', 'Read current Mission Control state, workers, manager notes and recent events, or details for an id.', { id: string }),
-  tool('inspect_worker_history', 'Read a page of worker event history when a completion summary is insufficient. Use before_seq for older pages.', {
+  tool('inspect_worker_history', 'Read a page of worker event history when a completion summary is insufficient. Works for active and archived workers; archived history is read-only evidence. Use before_seq for older pages.', {
     worker_id: string, before_seq: number, limit: number, types: { type: 'array', items: string }
   }, ['worker_id']),
   tool('use_skill', 'Load the full instructions of an installed skill by name. Use when the user selects a skill with $name or asks to follow a skill.', { name: string }, ['name']),
