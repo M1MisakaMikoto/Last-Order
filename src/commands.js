@@ -5,9 +5,9 @@ export const COMMANDS = [
   { name: 'monitor', usage: '[worker_id]', description: '在独立窗口监视 worker', args: 'worker' },
   { name: 'manager', description: '打开 Manager 对话' },
   { name: 'workers', usage: '[all]', description: '打开 Worker 列表；all 一次性显示已归档 worker', args: 'text' },
-  { name: 'archive', usage: '[worker_id]', description: '手动归档一个已停止的 worker', args: 'worker' },
+  { name: 'archive', usage: '[worker_id|all]', description: '在 Workers 页面归档停止的 worker，all 批量归档', args: 'text' },
   { name: 'interrupt', usage: '[消息]', description: '中止 Manager 当前工作；带消息时优先处理新消息', args: 'text' },
-  { name: 'memory', usage: 'status|new|clear', description: '查看或为 Manager 开启新的原生会话', args: 'text' },
+  { name: 'memory', usage: 'status|clear', description: '查看或清空 Manager 原生会话', args: 'text' },
   { name: 'skills', usage: '[manager|worker_id]', description: '列出当前 Codex 会话可见的 skills', args: 'worker' },
   { name: 'w', usage: '消息', description: '向选中 worker 发消息', args: 'text', required: true, worker: true },
   { name: 'pause', description: '暂停选中 worker', worker: true },
@@ -38,6 +38,10 @@ export const COMMANDS = [
 ];
 
 export const commandUsage = command => '/' + command.name + (command.usage ? ' ' + command.usage : '');
+export const MEMORY_ACTIONS = [
+  { value: 'status', description: '查看当前 Manager native thread' },
+  { value: 'clear', description: '清空 Manager 记忆并开启新的 native 会话' }
+];
 export function fileQuery(input) {
   const match = /^\/open\s+(.*)$/is.exec(input);
   if (!match) return null;
@@ -86,6 +90,14 @@ export function commandCompletions(input, context = {}) {
   if (!command) return { items: [], hint: '未知命令，输入 /help 查看帮助' };
   const hint = commandUsage(command) + ' · ' + description(command);
   const prefix = argument.toLowerCase(), values = [];
+  if (command.name === 'memory') {
+    const items = MEMORY_ACTIONS.filter(item => item.value.startsWith(prefix)).map(item => ({
+      value: '/memory ' + item.value,
+      label: item.value,
+      description: item.description
+    }));
+    return { command, hint, items };
+  }
   if (command.args === 'worker') for (const worker of context.workers ?? []) values.push({ value: worker.id, description: `${worker.provider ?? ''} / ${worker.kind ?? ''} · ${worker.status ?? ''} · ${worker.title ?? context.pipelines?.[worker.pipelineId]?.title ?? ''}` });
   if (['approval', 'question'].includes(command.args) && !/\s/.test(argument)) {
     const requests = command.args === 'approval' ? context.approvals ?? [] : context.questions ?? [];

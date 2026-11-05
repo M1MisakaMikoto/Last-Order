@@ -57,8 +57,8 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - Manager 忙碌时，新消息进入独立的“排队发送”列表，不混入普通对话；开始处理后自动移出队列并回到正常对话时间线。
 - Manager 主界面只显示用户与 Manager 的对话；worker 工具调用、后台检查、内部通信不会混入消息区。顶部状态行展示 Manager 阶段、活动/排队/等待/完成 worker 数、用户待处理消息和 worker 回调数。
 - Manager 与用户对话期间到达的 worker 回调不会抢占当前 turn，而是保留在通知队列中，在当前 turn 结束后自动进入下一轮。
-- `/memory new`（别名 `/memory clear`）停止当前 Manager runtime 并清除 manager.sessionId/lastTurnId，使下一条消息创建新的 native Codex thread。AGENTS、managerPrompt、Mission Control 状态、worker、checkpoint 和审计事件均保留；旧 thread 只是不再被 Last Order 引用。
-- Manager 消息按 `memoryEpoch` 分区；`/memory new` 后消息区只显示新 epoch 的对话，旧消息仍保留在审计事件中。
+- `/memory clear`停止当前 Manager runtime 并清除 manager.sessionId/lastTurnId，使下一条消息创建新的 native Codex thread。AGENTS、managerPrompt、Mission Control 状态、worker、checkpoint 和审计事件均保留；旧 thread 只是不再被 Last Order 引用。
+- Manager 消息按 `memoryEpoch` 分区；`/memory clear` 后消息区只显示新 epoch 的对话，旧消息仍保留在审计事件中。
 - `Ctrl+Tab` 切换 Manager/Workers；Tab 只用于命令补全，不再负责页面切换。VSCode 注册了相同快捷键并转发给虚拟 TUI。
 - VSCode Webview 在 window capture 阶段拦截 `Ctrl+Tab`，并兼容 `event.key`/`event.code`；Webview 聚焦时设置 `missionControl.managerFocus` context key，keybinding 同时匹配该键、`webviewId`、`focusedView` 和 `activeWebviewPanelId`。
 - Workers 或辅助面板中按 Esc 自动返回 Manager 页面；补全打开时 Esc 仍先关闭补全。
@@ -150,7 +150,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：119 项。
+- 当前自动化测试：128 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

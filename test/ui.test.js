@@ -24,16 +24,17 @@ test('/interrupt without text stops the manager without sending or retrying a me
   assert.match(ui.notice, /已停止 Manager 当前工作/);
 });
 
-test('/memory new opens a new Manager native conversation while keeping status visible', async () => {
+test('/memory clear opens a new Manager native conversation while keeping status visible', async () => {
   const { ui } = navigationUI();
   let cleared = 0;
   ui.service.state.manager.sessionId = 'old-thread';
   ui.service.clearManagerMemory = async () => { cleared++; ui.service.state.manager.sessionId = null; return { cleared: true, previousSessionId: 'old-thread' }; };
   await ui.command('/memory status');
   assert.match(ui.notice, /old-thread/);
-  await ui.command('/memory new');
+  await ui.command('/memory clear');
   assert.equal(cleared, 1);
   assert.match(ui.notice, /新的原生会话/);
+  await assert.rejects(ui.command('/memory new'), /Usage: \/memory status\|clear/);
   await ui.command('/memory status');
   assert.match(ui.notice, /新的 native 对话 thread/);
 });
@@ -730,12 +731,37 @@ test('Worker list hides archived workers by default and /workers all shows them 
   assert.deepEqual(ui.workers.map(worker => worker.id), ['w0']);
 
   const archived = [];
-  service.archiveWorker = async id => { archived.push(id); state.workers.w0.archivedAt = '2026-01-02T00:00:00Z'; return { worker_id: id }; };
+  service.archiveWorker = async id => { archived.push(id); state.workers[id].archivedAt = '2026-01-02T00:00:00Z'; return { worker_id: id }; };
   state.workers.w0.status = 'succeeded';
   ui.selected = 0;
+  await ui.command('/manager');
+  await assert.rejects(ui.command('/archive w0'), /Workers view/);
+  await ui.command('/workers');
   await ui.command('/archive w0');
   assert.deepEqual(archived, ['w0']);
   assert.deepEqual(ui.workers, []);
+});
+
+test('/archive all only archives stopped workers and is restricted to Workers view', async () => {
+  const { ui, state, service } = navigationUI();
+  state.workers = {
+    w0: { id: 'w0', provider: 'codex', kind: 'implement', status: 'running', title: 'Active', pipelineId: 'p0', epoch: 1 },
+    w1: { id: 'w1', provider: 'codex', kind: 'implement', status: 'succeeded', title: 'Done', pipelineId: 'p1', epoch: 1 },
+    w2: { id: 'w2', provider: 'codex', kind: 'implement', status: 'failed', title: 'Failed', pipelineId: 'p2', epoch: 1 }
+  };
+  state.pipelines = { p0: { id: 'p0', title: 'Active' }, p1: { id: 'p1', title: 'Done' }, p2: { id: 'p2', title: 'Failed' } };
+  const archived = [];
+  service.archiveWorker = async (id, reason) => {
+    archived.push([id, reason]);
+    state.workers[id].archivedAt = '2026-01-02T00:00:00Z';
+    return { worker_id: id };
+  };
+  await assert.rejects(ui.command('/archive all'), /Workers view/);
+  await ui.command('/workers');
+  await ui.command('/archive all');
+  assert.deepEqual(archived, [['w1', 'archive-all'], ['w2', 'archive-all']]);
+  assert.equal(state.workers.w0.archivedAt, undefined);
+  assert.match(ui.notice, /已归档 2 个/);
 });
 
 test('Worker focus separates selection from detail scrolling and preserves positions across conversations', async () => {

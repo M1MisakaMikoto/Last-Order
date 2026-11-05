@@ -44,6 +44,12 @@ test('project prefixes provide contextual -A/-B completions', () => {
   assert.deepEqual(commandCompletions('-b', { projects }).items.map(item => item.value), ['-B ']);
 });
 
+test('memory action completion offers clear but not duplicate new', () => {
+  assert.deepEqual(commandCompletions('/mem').items.map(item => item.value), ['/memory ']);
+  assert.deepEqual(commandCompletions('/memory c').items.map(item => item.value), ['/memory clear']);
+  assert.deepEqual(commandCompletions('/memory s').items.map(item => item.value), ['/memory status']);
+});
+
 test('file completion supports Windows separators, Unicode and spaces while excluding symlinks', () => {
   const context = { files: [{ name: '中文 页面.html' }, { name: 'nested', directory: true }, { name: 'outside', symlink: true }] };
   assert.equal(commandCompletions('/open src\\中', context).items[0].value, '/open src/中文 页面.html');

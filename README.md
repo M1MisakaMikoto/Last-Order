@@ -54,7 +54,7 @@ Tab锛堟垨 Shift+Tab锛夊彧鍦?Manager 鍜?Workers 涓や釜涓荤晫闈�
 | Shift+鈫愨啋 / Ctrl+A | 閫夋嫨杈撳叆鍐呭 / 鍏ㄩ€夎緭鍏ユ锛涜緭鍏ュ拰 Delete 浼氭浛鎹㈤€夊尯 |
 | Shift+鈫戔啌 / Ctrl+鈫戔啌 | 鐩存帴婊氬姩褰撳墠瀵硅瘽鎴栬鎯咃紝涓嶆敼鍙?worker 閫夋嫨 |
 | `/manager` / `/workers` | 鐩存帴鎵撳紑瀵瑰簲涓荤晫闈?|
-| `/archive [worker_id]` | 手动归档已停止 worker；归档后只读且不能恢复 |
+| `/archive [worker_id|all]` | 手动归档已停止 worker；归档后只读且不能恢复 |
 | `/interrupt 娑堟伅` | 鍋滄 manager 褰撳墠杞锛屾仮澶嶅師鐢熶細璇濆苟浼樺厛澶勭悊鏂拌緭鍏ワ紱worker 榛樿缁х画 |
 | F1 / F2 / F3 / F4 | manager 瀵硅瘽 / 閫変腑 worker 瀵硅瘽 / 宸ヤ綔鍖?/ Git |
 | F5 | 灞曞紑 / 鎶樺彔褰撳墠瀵硅瘽鐨勫叏閮ㄥ悗鍙拌繃绋?|
@@ -70,7 +70,7 @@ Tab锛堟垨 Shift+Tab锛夊彧鍦?Manager 鍜?Workers 涓や釜涓荤晫闈�
 | `/approve ID`銆乣/deny ID` | 鐢ㄦ埛鎵瑰噯鎴栨嫆缁濓紱涓嶆墿灞曚负浼氳瘽姘镐箙鑷姩鎵瑰噯 |
 | `/question ID`銆乣/answer ID 绛斿` | 鏌ョ湅鍜屽洖绛斿師鐢熼棶棰橈紱worker 闇€姹傞棶棰樺悓鏃堕€氱煡 manager |
 | `/settings` | 缂栬緫 Manager/Worker 鐨?provider銆乵odel銆乪ffort銆佽嚜瀹氫箟鎻愮ず璇嶃€佸鎵广€佸苟鍙戙€侀潤榛樸€侀紶鏍囨嫋閫夊拰蹇嵎閿彁绀猴紱Ctrl+S 淇濆瓨锛孍sc 鍙栨秷 |
-| `/memory status\|new\|clear` | 查看 Manager native thread；`new`（别名 `clear`）开启新会话并清空消息区，保留任务、AGENTS 和审计历史 |
+| `/memory status\|new\|clear` | 查看 Manager native thread；`clear`开启新会话并清空消息区，保留任务、AGENTS 和审计历史 |
 | `/skills` | 查看统一 Skill Registry；输入 `$` 补全，`$skill-name` 显式选择后注入完整 SKILL.md |
 
 Last Order 鏄?Windows 涓婄殑 coding-agent 宸ヤ綔鍖猴紝涓€涓?manager 瀵规帴鐢ㄦ埛锛孧ission Control 涓ぎ鏈嶅姟绠＄悊鐙珛 worker 浠诲姟銆乵anager 鑷敤澶囨敞鍜屽畬鎴愬洖璋冦€俶anager 鍜岄粯璁?worker 鍙垎鍒€夋嫨 Claude Code銆丆odex銆丏eepSeek Harness 鎴?OpenCode銆?
@@ -136,7 +136,7 @@ Tab锛堟垨 Shift+Tab锛夊彧鍦?Manager 鍜?Workers 涓や釜涓荤晫闈�
 | `/approve ID`銆乣/deny ID` | 鐢ㄦ埛鎵瑰噯鎴栨嫆缁濓紱涓嶆墿灞曚负浼氳瘽姘镐箙鑷姩鎵瑰噯 |
 | `/question ID`銆乣/answer ID 绛斿` | 鏌ョ湅鍜屽洖绛斿師鐢熼棶棰橈紱worker 闇€姹傞棶棰樺悓鏃堕€氱煡 manager |
 | `/settings` | 缂栬緫 Manager/Worker 鐨?provider銆乵odel銆乪ffort銆佽嚜瀹氫箟鎻愮ず璇嶃€佸鎵广€佸苟鍙戙€侀潤榛樸€侀紶鏍囨嫋閫夊拰蹇嵎閿彁绀猴紱Ctrl+S 淇濆瓨锛孍sc 鍙栨秷 |
-| `/memory status\|new\|clear` | 查看 Manager native thread；`new`（别名 `clear`）开启新会话并清空消息区，保留任务、AGENTS 和审计历史 |
+| `/memory status\|new\|clear` | 查看 Manager native thread；`clear`开启新会话并清空消息区，保留任务、AGENTS 和审计历史 |
  会动态补全已安装 skill，Tab 填入 |
 | `/reload` | CLI 由 supervisor 重启新进程；VSCode 停止服务后自动 Reload Window，重载扩展与 backend 并重新打开 Manager |
 | 榧犳爣鎷栭€?| 榛樿浣跨敤缁堢鍘熺敓閫夋嫨锛涘簲鐢ㄥ眰妯″紡涓嬫嫋閫夊悗鎸?Ctrl+C 澶嶅埗锛屽苟杩囨护杈规瀛楃 |

@@ -11,6 +11,7 @@ import { copyText, readClipboard } from './clipboard.js';
 import { PRODUCT_NAME } from './core/identity.js';
 
 const statusLabel = status => ({ queued: '排队', starting: '启动中', running: '运行中', waiting_approval: '等待审批', paused: '已暂停', cancelled: '已取消', failed: '失败', blocked: '阻塞', blocked_requirements: '等待澄清', blocked_technical: '技术阻塞', review_failed: '验收未通过', succeeded: '已完成', interrupted: '已中断' })[status] ?? status;
+const ARCHIVABLE_WORKER_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'interrupted', 'paused', 'blocked_requirements', 'blocked_technical', 'review_failed']);
 function labeledLines(label, value, columns) {
   const prefix = '  ' + fit(label, 4) + '  ';
   const continuation = ' '.repeat(Array.from(prefix).reduce((sum, char) => sum + width(char), 0));
@@ -682,7 +683,7 @@ export class TerminalUI {
     }
     if (command === 'memory') {
       const action = args.trim();
-      if (action === 'new' || action === 'clear') {
+      if (action === 'clear') {
         const result = await this.service.clearManagerMemory();
         this.notice = result.cleared
           ? '已为 Manager 开启新的原生会话；工作规范、AGENTS 和任务状态仍保留'
@@ -693,7 +694,7 @@ export class TerminalUI {
           ? `Manager native thread: ${sessionId} · /memory clear 可清空`
           : 'Manager 当前使用新的 native 对话 thread';
       } else {
-        throw new Error('Usage: /memory status|new|clear');
+        throw new Error('Usage: /memory status|clear');
       }
       this.render(); return;
     }
@@ -795,7 +796,7 @@ export class TerminalUI {
         'Ctrl+↑↓ / PgUp / PgDn: 逐行或翻页滚动；Shift+↑: 顶部；Shift+↓: 底部',
         '输入框 ←→: 移动光标；Home / End: 行首 / 行尾',
         'Shift+←→: 选择输入内容；Ctrl+A: 全选；输入/Delete 替换选区',
-        '/memory status: 查看 Manager native thread；/memory new: 开启新的 Manager 原生会话',
+        '/memory status: 查看 Manager native thread；/memory clear: 清空记忆并开启新的原生会话',
         '/skills [actor]: 列出 Codex 可见 skills；在消息中输入 $skill-name 可显式调用',
         '/archive [worker_id]: 手动归档已停止 worker；/workers all 一次性查看归档项',
         '输入为空时 ←→: 切换对话 / 工作区 / Git；Ctrl+Home / Ctrl+End: 滚动内容',
@@ -834,6 +835,15 @@ export class TerminalUI {
       return this.showPanel(this.workerPanel);
     }
     if (command === 'archive') {
+      if (this.screen !== 'workers') throw new Error('/archive is only available in the Workers view');
+      if (args.trim() === 'all') {
+        const targets = this.allWorkers.filter(worker => !worker.archivedAt && ARCHIVABLE_WORKER_STATUSES.has(worker.status));
+        for (const worker of targets) await this.service.archiveWorker(worker.id, 'archive-all');
+        this.notice = targets.length ? `已归档 ${targets.length} 个停止的 worker` : '没有可归档的停止 worker';
+        this.selected = Math.max(0, Math.min(this.selected, this.workers.length - 1));
+        this.render();
+        return;
+      }
       const target = args ? this.allWorkers.find(worker => worker.id === args || worker.id.startsWith(args)) : this.worker;
       if (!target) throw new Error('Unknown worker');
       const result = await this.service.archiveWorker(target.id);
