@@ -546,16 +546,39 @@ class ManagerTuiViewProvider {
 async function openExternalLink(value) {
   const target = String(value ?? '').trim();
   if (!target) return;
+  if (target.startsWith('lastorder-copy:')) {
+    const encoded = target.slice('lastorder-copy:'.length);
+    const text = Buffer.from(encoded, 'base64url').toString('utf8');
+    await vscode.env.clipboard.writeText(text);
+    vscode.window.showInformationMessage('Copied code block to clipboard.');
+    return;
+  }
   if (/^(?:https?:\/\/|mailto:)/i.test(target)) {
     await vscode.env.openExternal(vscode.Uri.parse(target));
     return;
   }
-  if (/^[a-z][a-z0-9+.-]*:/i.test(target)) return;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(target) && !/^[A-Za-z]:[\\/]/.test(target)) return;
   const root = workspaceRoot();
-  const file = path.resolve(root, target.replace(/^\.\//, '').split('#')[0]);
-  const relative = path.relative(root, file);
-  if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return;
-  await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
+  const [targetPath, anchor] = target.split('#');
+  const cleaned = targetPath.replace(/^\.\//, '');
+  const file = path.isAbsolute(cleaned) ? path.resolve(cleaned) : path.resolve(root, cleaned);
+  if (!path.isAbsolute(cleaned)) {
+    const relative = path.relative(root, file);
+    if (relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) return;
+  }
+  const lineMatch = /^L(\d+)(?:-L?(\d+))?$/.exec(anchor ?? '');
+  if (!lineMatch) {
+    await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(file));
+    return;
+  }
+  const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+  const startLine = Math.max(0, Math.min(document.lineCount - 1, Number(lineMatch[1]) - 1));
+  const endLine = Math.max(startLine, Math.min(document.lineCount - 1, Number(lineMatch[2] ?? lineMatch[1]) - 1));
+  const endCharacter = document.lineAt(endLine).text.length;
+  await vscode.window.showTextDocument(document, {
+    preview: false,
+    selection: new vscode.Range(startLine, 0, endLine, endCharacter)
+  });
 }
 
 async function openManager() {

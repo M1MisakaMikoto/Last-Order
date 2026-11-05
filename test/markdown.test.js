@@ -25,7 +25,16 @@ test('markdown renders ANSI formatting, lists, code blocks and OSC 8 links', () 
   assert.match(text, /\x1b\]8;;https:\/\/openai\.com\/docs\x1b\\/);
   assert.match(text, /┌─ js/);
   assert.match(text, /const answer = 42/);
+  assert.match(text, /lastorder-copy:/);
+  assert.match(text, /\[copy code\]/);
   for (const line of lines) assert.ok(styledWidth(line) <= 32);
+});
+
+test('file mentions render as underlined clickable paths with line anchors', () => {
+  const text = renderMarkdown('See {{file:src/app.ts#L10-L20}} and `src/other.ts:3`.', 100).join('\n');
+  assert.match(text, /src\/app\.ts#L10-L20/);
+  assert.match(text, /src\/other\.ts#L3/);
+  assert.match(text, /\x1b\[4m/);
 });
 
 test('markdown allows relative file links but strips dangerous protocols', () => {

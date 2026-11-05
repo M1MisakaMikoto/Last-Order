@@ -15,21 +15,40 @@ export function styledWidth(text) {
 function safeLink(url) {
   const value = String(url ?? '').trim();
   if (/^(?:https?:\/\/|mailto:)/i.test(value)) return value.replace(/[\x00-\x20\x7f]/g, encodeURIComponent);
+  if (/^lastorder-copy:[A-Za-z0-9_-]+$/.test(value)) return value;
+  if (/^[A-Za-z]:[\\/]/.test(value)) return value;
   if (value && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !/[\x00-\x1f\x7f]/.test(value)) return value;
   return '';
 }
 
+function fileMention(value) {
+  const text = String(value ?? '').trim();
+  if (!text || /^(?:https?:\/\/|mailto:)/i.test(text) || /\s{2,}/.test(text)) return null;
+  const hash = /^(.+?)#L(\d+)(?:-L?(\d+))?$/i.exec(text);
+  const match = hash ?? /^(.+?)(?::(\d+)(?:-(\d+))?)?$/.exec(text);
+  if (!match) return null;
+  const file = match[1];
+  if (!(/(?:^|[\\/])[^\\/]+\.[a-z0-9]{1,12}$/i.test(file) || /^[A-Za-z]:[\\/]/.test(file))) return null;
+  const anchor = match[2] ? `#L${match[2]}${match[3] ? `-L${match[3]}` : ''}` : '';
+  return { text, target: file.replaceAll('\\', '/') + anchor };
+}
+
 function inlineSegments(text, base = {}) {
-  const segments = [], pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  const segments = [], pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|\{\{file:([^}]+)\}\}|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
   let last = 0, match;
   while ((match = pattern.exec(text))) {
     if (match.index > last) segments.push({ ...base, text: text.slice(last, match.index) });
     if (match[2] !== undefined) {
       const link = safeLink(match[3]);
       segments.push({ ...base, text: match[2], link: link || null, underline: Boolean(link) });
-    } else if (match[4] !== undefined) segments.push({ ...base, text: match[4], code: true });
-    else if (match[5] !== undefined) segments.push({ ...base, text: match[5], bold: true });
-    else if (match[6] !== undefined) segments.push({ ...base, text: match[6], italic: true });
+    } else if (match[4] !== undefined) {
+      const mention = fileMention(match[4]);
+      segments.push({ ...base, text: mention?.text ?? match[4], link: mention?.target ?? null, underline: Boolean(mention), code: true });
+    } else if (match[5] !== undefined) {
+      const mention = fileMention(match[5]);
+      segments.push({ ...base, text: match[5], link: mention?.target ?? null, underline: Boolean(mention), code: true });
+    } else if (match[6] !== undefined) segments.push({ ...base, text: match[6], bold: true });
+    else if (match[7] !== undefined) segments.push({ ...base, text: match[7], italic: true });
     last = pattern.lastIndex;
   }
   if (last < text.length) segments.push({ ...base, text: text.slice(last) });
@@ -78,19 +97,27 @@ export function renderMarkdown(text, columns = 80) {
   columns = Math.max(1, columns);
   const source = stripFormatting(text).replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
   const output = [];
-  let fenced = false, language = '';
+  let fenced = false, language = '', codeLines = [];
   for (const raw of source.split('\n')) {
     if (/^\s*```/.test(raw)) {
       if (!fenced) {
         fenced = true; language = raw.trim().slice(3).trim();
+        codeLines = [];
         output.push(styleSegment({ dim: true }, '┌─ ' + (language || 'code')));
       } else {
         fenced = false;
         output.push(styleSegment({ dim: true }, '└─'));
+        const code = codeLines.join('\n');
+        if (code && Buffer.byteLength(code) <= 16_000) {
+          const target = 'lastorder-copy:' + Buffer.from(code).toString('base64url');
+          output.push(styleSegment({ link: target, underline: true, dim: true }, '[copy code]'));
+        }
+        codeLines = [];
       }
       continue;
     }
     if (fenced) {
+      codeLines.push(raw);
       for (const line of wrapSegments([{ text: raw || ' ' }], Math.max(1, columns - 2))) output.push(styleSegment({ dim: true }, '│ ') + line);
       continue;
     }

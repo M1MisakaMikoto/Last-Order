@@ -120,6 +120,13 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - End/Shift+Down 回到最新时恢复无额外留白。
 - 滚动提示会显示当前底部留白行数。
 
+## Terminal Links And Code Copy
+
+- 每个 Markdown fenced code block 下方显示可点击 `[copy code]`；VSCode xterm 通过 OSC 8 自定义链接把最多 16 KB 内容写入剪贴板。
+- 文件提及支持 `{{file:src/app.ts#L10-L20}}`，行内代码路径如 `src/app.ts:10-20` 也会自动变成下划线链接。
+- 点击文件链接会在 VSCode 打开文件并选中指定行；绝对路径和相对当前工作区路径都支持。
+- 原生终端是否支持 OSC 8 点击取决于终端；不支持时仍可用鼠标选择/Ctrl+C 复制。
+
 ## Image Attachments
 
 - VSCode Manager TUI 提供 Attach image 按钮，可选择 PNG、JPEG、GIF、WebP；输入区上方显示缩略图并可移除。
@@ -188,7 +195,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：134 项。
+- 当前自动化测试：135 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

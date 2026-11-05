@@ -42,7 +42,7 @@ test('VSCode extension registers Last Order commands and worker tree', async () 
       registerCommand: (name, callback) => { commands.push(name); const disposable = { dispose() {} }; disposables.push(disposable); return disposable; },
       executeCommand: async () => {}
     },
-    env: { openExternal: async uri => { fake.opened = uri; }, clipboard: { writeText: async () => {} } }
+    env: { openExternal: async uri => { fake.opened = uri; }, clipboard: { writeText: async text => { fake.copied = text; } } }
   };
   const originalLoad = Module._load;
   Module._load = function (request, parent, isMain) {
@@ -86,6 +86,8 @@ test('VSCode extension registers Last Order commands and worker tree', async () 
     ].join('\n')), '用户 · #2 · 14:51:51\n 这是用户消息');
     await extension.openExternalLink('javascript:alert(1)');
     assert.equal(fake.opened, undefined);
+    await extension.openExternalLink('lastorder-copy:' + Buffer.from('git status').toString('base64url'));
+    assert.equal(fake.copied, 'git status');
     await extension.openExternalLink('https://openai.com/docs');
     assert.equal(fake.opened, 'https://openai.com/docs');
   } finally {
