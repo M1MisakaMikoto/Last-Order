@@ -179,6 +179,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 - Last Order 左侧 `Last Order` 容器包含 `Workers` 与 `Git Diff` 两棵树视图；Git Diff 由 vendored MIT `git-diff-viewer` 提供，不再需要独立扩展。
 - Git Diff 支持仓库选择、HEAD/index/ref 对比、完整文件树、原生 VS Code diff、相对路径复制、上下文导出和可选 Codex MCP 集成。
+- Worker Monitor 终端使用 `shellPath + shellArgs` 直接启动 Node，不把带空格的路径拼成 shell 命令，兼容 PowerShell、cmd、bash 和 zsh。
 
 - VSCode 是单一产品入口，统一管理 Mission Control 生命周期。
 - 左侧 Activity Bar 提供 worker 树。

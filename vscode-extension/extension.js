@@ -851,9 +851,14 @@ async function openMonitor(worker, projectInfo) {
     ? { project_root: projectInfo.project, data_directory: projectInfo.dataDirectory }
     : lastStatus || await refreshState();
   const script = backendFile('bin/worker-monitor.js');
-  const terminal = vscode.window.createTerminal({ name: `LO ${worker.id}`, cwd: status.project_root, location: { viewColumn: vscode.ViewColumn.Beside } });
+  const terminal = vscode.window.createTerminal({
+    name: `LO ${worker.id}`,
+    cwd: status.project_root,
+    shellPath: nodeExecutable(),
+    shellArgs: [script, '--data-directory', status.data_directory, '--worker', worker.id],
+    location: { viewColumn: vscode.ViewColumn.Beside }
+  });
   terminal.show();
-  terminal.sendText(`"${nodeExecutable()}" "${script}" --data-directory "${status.data_directory}" --worker "${worker.id}"`);
 }
 
 async function archiveWorker(item) {

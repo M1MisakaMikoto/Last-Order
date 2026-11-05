@@ -78,6 +78,8 @@ test('VSCode extension registers Last Order commands and worker tree', async () 
     assert.match(extensionSource, /Attach image/);
     assert.match(extensionSource, /type: 'pickImages'/);
     assert.match(extensionSource, /attachmentTray/);
+    assert.match(extensionSource, /shellArgs: \[script, '--data-directory', status\.data_directory, '--worker', worker\.id\]/);
+    assert.doesNotMatch(extensionSource, /terminal\.sendText\(`"\$\{nodeExecutable\(\)\}"/);
     assert.equal(extension.filterTerminalSelection([
       '────────────────────────',
       '╭─ 用户 · #2 · 14:51:51────────╮',
