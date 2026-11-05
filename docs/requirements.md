@@ -101,6 +101,12 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - Manager 系统规则要求每次完成/失败回调都做出明确的用户汇报决策：要么汇报结果、证据、行为变化和风险，要么明确说明为什么不需要用户操作。
 - Manager 可通过 `inspect_worker_history(worker_id, before_seq, limit, types)` 分页读取 worker 事件历史。
 
+## Factual Manager Reporting
+
+- Manager 必须区分自己的动作（需求对齐、规划、拆解）和 Worker 的动作（探索、实现、测试、审查）。
+- 已委派的工作不得描述成 Manager 正在亲自检查、运行或实现；已知时应说明 Worker 或 task 身份。
+- 每次阶段性回复应明确用户下一步是只需等待，还是需要回答具体问题或做决策。
+
 ## Conversation Quotes
 
 - TUI 支持 `/quote #seq 指令` 引用当前 Manager/Worker 会话消息，也支持 `/quote actor:#seq 指令` 跨 actor 引用。

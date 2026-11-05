@@ -385,6 +385,8 @@ test('manager auto-delegates concrete archive analysis but answers pure concepts
   const worker = Object.values(service.state.workers).find(item => item.kind === 'explore');
   const delegated = payloads.find(item => item.user_messages.some(message => message.text.includes('spatial-annotation-demo-kit.zip')));
   assert.equal(delegated.delegation_policy.requires_explore, true);
+  assert.match(delegated.delegation_policy.instruction, /Report activity factually/);
+  assert.match(delegated.delegation_policy.instruction, /Never say you are inspecting/);
   assert.equal(delegated.delegation_policy.policy_version, '2026-11-04.3');
   assert.equal(delegated.prompt_config.managerPolicyVersion, '2026-11-04.3');
   assert.equal(delegated.delegation_policy.auto_started.worker_kind, 'explore');
@@ -444,6 +446,7 @@ test('Mission Control separates staff prompt configuration from system rules and
   assert.match(service.managerInstructions(), /Every worker_finished or worker_failed callback requires an explicit user-report decision/);
   assert.match(service.managerInstructions(), /ask the user whether to archive that completed worker or provide a new requirement/);
   assert.match(service.managerInstructions(), /keep interactive work with the manager/);
+  assert.match(service.managerInstructions(), /Never claim that you are inspecting files/);
 
   await service.invoke('manager', service.state.manager.epoch, 'start_worker', {
     title: 'Prompt config', prompt: 'Inspect the worker prompt'
