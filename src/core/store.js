@@ -55,6 +55,10 @@ export class Store {
     const rows = this.db.prepare(`SELECT * FROM events WHERE ${clauses.join(' AND ')} ORDER BY seq DESC LIMIT ?`).all(...values);
     return rows.reverse().map(row => ({ ...row, data: JSON.parse(row.data) }));
   }
+  event(actor, seq) {
+    const row = this.db.prepare('SELECT * FROM events WHERE actor=? AND seq=?').get(actor, seq);
+    return row ? { ...row, data: JSON.parse(row.data) } : null;
+  }
   close() {
     this.db?.close(); this.db = undefined;
     if (this.lock !== undefined) { closeSync(this.lock); this.lock = undefined; unlinkSync(this.lockPath); }

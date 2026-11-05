@@ -6,6 +6,7 @@ export const COMMANDS = [
   { name: 'manager', description: '打开 Manager 对话' },
   { name: 'workers', usage: '[all]', description: '打开 Worker 列表；all 一次性显示已归档 worker', args: 'text' },
   { name: 'archive', usage: '[worker_id|all]', description: '在 Workers 页面归档停止的 worker，all 批量归档', args: 'text' },
+  { name: 'quote', usage: '[actor:]#seq 指令', description: '引用 Manager 或 Worker 历史消息并发送给 Manager', args: 'text', required: true },
   { name: 'interrupt', usage: '[消息]', description: '中止 Manager 当前工作；带消息时优先处理新消息', args: 'text' },
   { name: 'memory', usage: 'status|clear', description: '查看或清空 Manager 原生会话', args: 'text' },
   { name: 'skills', usage: '[manager|worker_id]', description: '列出当前 Codex 会话可见的 skills', args: 'worker' },

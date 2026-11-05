@@ -101,6 +101,13 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - Manager 系统规则要求每次完成/失败回调都做出明确的用户汇报决策：要么汇报结果、证据、行为变化和风险，要么明确说明为什么不需要用户操作。
 - Manager 可通过 `inspect_worker_history(worker_id, before_seq, limit, types)` 分页读取 worker 事件历史。
 
+## Conversation Quotes
+
+- TUI 支持 `/quote #seq 指令` 引用当前 Manager/Worker 会话消息，也支持 `/quote actor:#seq 指令` 跨 actor 引用。
+- 引用会保留 project、actor、seq、role、time 和完整文本，同时以 Markdown blockquote 显示在 Manager 用户消息中。
+- Manager prompt 的 user_messages 携带结构化 `quotes`，便于追溯来源。
+- Ctrl+Q 可将应用模式选中的历史文本插入输入框为引用块。
+
 ## Worker Archiving
 
 - Worker 列表默认隐藏已归档 worker；`/workers all` 一次性显示全部 worker，返回 Manager 后恢复默认隐藏。
@@ -150,7 +157,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：128 项。
+- 当前自动化测试：131 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

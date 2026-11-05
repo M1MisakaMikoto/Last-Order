@@ -148,7 +148,7 @@ export class ServiceClient extends EventEmitter {
   }
 
   snapshot() { return this.state; }
-  async sendManagerMessage(text, interrupt = false) { await this.request('POST', '/manager/message', { text, interrupt }); await this.refresh(); }
+  async sendManagerMessage(text, interrupt = false, quotes = []) { await this.request('POST', '/manager/message', { text, interrupt, quotes }); await this.refresh(); }
   async interruptManager() { const result = await this.request('POST', '/manager/interrupt', {}); await this.refresh(); return result; }
   async clearManagerMemory() { const result = await this.request('POST', '/manager/memory/clear', {}); await this.refresh(); return result; }
   async sendWorkerMessage(workerId, message) { await this.request('POST', `/worker/${encodeURIComponent(workerId)}/message`, { text: message }); await this.refresh(); }
@@ -157,6 +157,10 @@ export class ServiceClient extends EventEmitter {
   async conversationTurns(actor = 'manager', limit = 50) {
     const result = await this.request('GET', `/conversation/turns?actor=${encodeURIComponent(actor)}&limit=${limit}`);
     return result.turns;
+  }
+  async conversationEvent(actor, seq) {
+    const result = await this.request('GET', `/conversation/event?actor=${encodeURIComponent(actor)}&seq=${encodeURIComponent(seq)}`);
+    return result.event;
   }
   async listSkills(actor = 'manager', forceReload = true) {
     return this.request('GET', `/skills?actor=${encodeURIComponent(actor)}&forceReload=${forceReload ? 'true' : 'false'}`);

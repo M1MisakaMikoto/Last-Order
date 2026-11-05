@@ -28,7 +28,7 @@ test('TUI service client mirrors Mission Control state, history and Git operatio
     config: { manager: 'codex', worker: 'codex' },
     snapshot: () => state,
     store: { history: actor => [{ seq: 1, actor, type: 'message', data: { role: 'assistant', text: 'hello' } }] },
-    sendManagerMessage: async (text, interrupt) => calls.push(['manager', text, interrupt]),
+    sendManagerMessage: async (text, interrupt, quotes) => calls.push(['manager', text, interrupt, quotes]),
     interruptManager: async () => { interrupted++; return { interrupted: true, discarded: 1 }; },
     clearManagerMemory: async () => { memoryClears++; return { cleared: true, previousSessionId: 'old-thread' }; },
     sendWorkerMessage: async (workerId, text) => calls.push(['worker', workerId, text]),
@@ -38,6 +38,7 @@ test('TUI service client mirrors Mission Control state, history and Git operatio
     respondApproval: () => {},
     answerQuestion: () => {},
     listConversationTurns: async (actor, options) => { versionCalls.push(['turns', actor, options]); return { data: [{ id: 'turn-1' }] }; },
+    conversationEvent: (actor, seq) => ({ actor, seq, type: 'message', data: { role: 'assistant', text: 'quoted' } }),
     listSkills: async (actor, options) => { versionCalls.push(['skills', actor, options]); return { data: [{ cwd: directory, errors: [], skills: [{ name: 'pdf', description: 'PDF', enabled: true }] }] }; },
     forkConversation: async (actor, options) => { versionCalls.push(['fork', actor, options]); return { id: 'thread-forked' }; },
     revertConversation: async (actor, options) => { versionCalls.push(['revert', actor, options]); return { thread: { id: 'thread-1' } }; },
@@ -56,8 +57,8 @@ test('TUI service client mirrors Mission Control state, history and Git operatio
   assert.equal(await client.git.diff({ id: 'w1' }, 'task'), 'diff w1 task');
   assert.equal((await client.git.changedFiles({ id: 'w1' }))[0].status, 'M');
   assert.equal(await client.git.content({ id: 'w1' }, 'src/w1.js', 'base'), 'w1:src/w1.js:base');
-  await client.sendManagerMessage('hello', true);
-  assert.deepEqual(calls[0], ['manager', 'hello', true]);
+  await client.sendManagerMessage('hello', true, [{ actor: 'w1', seq: 2, text: 'quoted' }]);
+  assert.deepEqual(calls[0], ['manager', 'hello', true, [{ actor: 'w1', seq: 2, text: 'quoted' }]]);
   assert.deepEqual(await client.interruptManager(), { interrupted: true, discarded: 1 });
   assert.equal(interrupted, 1);
   assert.deepEqual(await client.clearManagerMemory(), { cleared: true, previousSessionId: 'old-thread' });
@@ -65,6 +66,7 @@ test('TUI service client mirrors Mission Control state, history and Git operatio
   assert.equal((await client.archiveWorker('w1', 'done')).worker_id, 'w1');
   assert.equal(archived, 1);
   assert.equal((await client.conversationTurns('manager', 5)).data[0].id, 'turn-1');
+  assert.equal((await client.conversationEvent('w1', 2)).data.text, 'quoted');
   assert.equal((await client.listSkills('manager')).skills.data[0].skills[0].name, 'pdf');
   assert.equal((await client.forkConversation('manager', { lastTurnId: 'turn-1' })).id, 'thread-forked');
   assert.equal((await client.revertConversation('manager', 'turn-1')).thread.id, 'thread-1');

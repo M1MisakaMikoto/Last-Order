@@ -488,6 +488,10 @@ export class MissionControlService extends EventEmitter {
       return runtime.listTurns(options);
     });
   }
+  conversationEvent(actor, seq) {
+    if (!Number.isSafeInteger(seq) || seq <= 0) throw new Error('Invalid event seq');
+    return this.store.event(actor, seq);
+  }
   async listSkills(actor = 'manager', options = {}) {
     const skills = await discoverSkills(this.git.root);
     return { data: [{ cwd: this.git.root, errors: [], skills }] };
@@ -585,14 +589,22 @@ export class MissionControlService extends EventEmitter {
     }, 'user');
     return { checkpointId, restoredFiles, forkedConversations };
   }
-  async sendManagerMessage(text, interrupt = false) {
+  async sendManagerMessage(text, interrupt = false, quotes = []) {
     if (!text.trim()) throw new Error('Message is empty');
     text = expandIncludes(text, this.git.root);
+    quotes = Array.isArray(quotes) ? quotes.slice(0, 5).map(quote => ({
+      project: String(quote.project ?? '').slice(0, 16),
+      actor: String(quote.actor ?? '').slice(0, 120),
+      seq: Number.isSafeInteger(quote.seq) ? quote.seq : null,
+      role: String(quote.role ?? '').slice(0, 40),
+      time: typeof quote.time === 'string' ? quote.time : null,
+      text: String(quote.text ?? '').slice(0, 12_000)
+    })) : [];
     const messageId = id('message'), queued = Boolean(this.managerBusy);
     const memoryEpoch = this.state.manager.memoryEpoch ?? 0;
-    this.change('manager_input', { role: 'user', text, interrupt, messageId, queued, memoryEpoch }, s => {
+    this.change('manager_input', { role: 'user', text, interrupt, messageId, queued, memoryEpoch, ...(quotes.length ? { quotes } : {}) }, s => {
       s.manager.hold = false;
-      s.manager.pending.push({ id: messageId, text, interrupt, queued });
+      s.manager.pending.push({ id: messageId, text, interrupt, queued, ...(quotes.length ? { quotes } : {}) });
     }, 'manager');
     this.managerError = null;
     if (interrupt && this.managerBusy) {

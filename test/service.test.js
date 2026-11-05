@@ -558,6 +558,22 @@ test('manager can archive a stopped worker only through the explicit archive too
   assert.equal(service.state.workers.w1.archiveReason, 'user confirmed');
 });
 
+test('quoted Manager messages preserve structured quote metadata in prompts and events', async t => {
+  let payload;
+  const { service } = await fixture(t, async () => {}, {
+    manager: async (_context, prompt) => { payload = JSON.parse(prompt); }
+  });
+  const quote = {
+    project: 'A', actor: 'worker_1', seq: 18, role: 'assistant',
+    time: '2026-11-05T01:00:00.000Z', text: 'Worker evidence text'
+  };
+  await service.sendManagerMessage('> quoted\n\nExplain this', false, [quote]);
+  await waitFor(service, () => !service.managerBusy && payload);
+  assert.deepEqual(payload.user_messages[0].quotes, [quote]);
+  const input = service.store.history('manager').find(event => event.type === 'manager_input');
+  assert.deepEqual(input.data.quotes, [quote]);
+});
+
 test('Mission Control creates and restores workspace checkpoints with native session references', async t => {
   const { service, git } = await fixture(t, async () => {}, { manager: async () => {} });
   service.state.manager.sessionId = 'manager-thread';

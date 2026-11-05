@@ -1,6 +1,6 @@
 import { emitKeypressEvents } from 'node:readline';
 import path from 'node:path';
-import { conversationGroups } from './conversation.js';
+import { conversationGroups, eventContent } from './conversation.js';
 import { clean, fit, wrap, width, border, renderConversation } from './conversation-view.js';
 export { clean, fit, wrap };
 import { TerminalInput } from './terminal-input.js';
@@ -525,6 +525,27 @@ export class TerminalUI {
     this.notice = `当前项目 -[${project.code}] ${project.root}`;
     this.render();
   }
+  async quoteMessage(args) {
+    const match = /^(?:([^:\s]+):)?#?(\d+)\s+([\s\S]+)$/.exec(String(args ?? '').trim());
+    if (!match) throw new Error('Usage: /quote [actor:]#seq 指令');
+    const actor = match[1] || (this.screen === 'workers' && this.worker ? this.worker.id : 'manager');
+    const seq = Number(match[2]);
+    const instruction = match[3].trim();
+    if (!instruction) throw new Error('Usage: /quote [actor:]#seq 指令');
+    const event = await this.service.conversationEvent(actor, seq);
+    if (!event) throw new Error(`No event #${seq} for ${actor}`);
+    const text = String(eventContent(event)).trim();
+    if (!text) throw new Error('Quoted event has no text content');
+    const project = (this.service.projects ?? []).find(item => item.active)?.code ?? '';
+    const role = event.data.role ?? event.type;
+    const quote = { project, actor, seq, role, time: event.time, text };
+    const quoted = text.split('\n').map(line => '> ' + line).join('\n');
+    const message = `> 引用 ${actor} · #${seq} · ${role}${event.time ? ' · ' + event.time : ''}\n${quoted}\n\n${instruction}`;
+    await this.service.sendManagerMessage(message, false, [quote]);
+    this.panel = 'manager'; this.screen = 'manager';
+    this.notice = `已引用 ${actor} #${seq} 并发送给 Manager`;
+    this.scrollTo('bottom'); this.render();
+  }
   navigateHistory(direction) {
     if (!this.history.length) return;
     if (this.historyIndex >= this.history.length) this.historyDraft = this.input;
@@ -552,6 +573,21 @@ export class TerminalUI {
         this.notice = '已全选输入框内容';
       }
       this.render();
+      return;
+    }
+    if (key.ctrl && key.name === 'q') {
+      const mouseSelected = this.settings.mouseSelection === 'app' ? filterSelection(this.selectedText()) : '';
+      const selected = mouseSelected || this.selectedInputText();
+      if (selected) {
+        this.insertInput(selected.split('\n').map(line => '> ' + line).join('\n') + '\n\n');
+        this.clearSelection(); this.clearInputSelection();
+        this.notice = '已插入引用，输入要补充的消息后按 Enter 发送';
+        this.historyIndex = this.history.length; this.historyDraft = '';
+        this.render();
+      } else {
+        this.notice = '先选择 Manager/Worker 历史文本，再按 Ctrl+Q 引用';
+        this.render();
+      }
       return;
     }
     if (key.ctrl && key.name === 'c') {
@@ -811,10 +847,11 @@ export class TerminalUI {
         '/diff task 或 /diff uncommitted: 切换 Git 比较范围', '/refresh: 刷新工作区或 Git',
         '鼠标拖选: native 由终端处理；app 模式支持滚动跟随、拖到边缘自动滚动，Ctrl+C 复制并过滤边框',
         'PgUp/PgDn: 滚动详情', 'Ctrl+P / Ctrl+N: 历史输入前后切换', 'Ctrl+U: 清空输入',
-        'Ctrl+C: 应用模式有选区时复制、复制后清除选区，无选区时不退出；Ctrl+V: 粘贴剪贴板',
+        'Ctrl+C: 应用模式有选区时复制；无选区不退出 TUI。Ctrl+Q: 将选中文本插入为引用。Ctrl+V: 粘贴剪贴板',
         '/checkpoint [名称]: 创建当前 workspace 与原生会话 checkpoint',
         '/checkpoints: 查看 checkpoint 列表',
         '/turns [actor]: 查看原生会话 turns',
+        '/quote [actor:]#seq 指令: 引用 Manager 或 Worker 历史消息并发送给 Manager',
         '/fork turn_id [actor]: 从原生 turn fork 对话',
         '/revert turn_id --yes [actor]: 删除 turn 及后续历史，不改文件',
         '/restore id [files|conversation|all] confirm: 恢复 checkpoint',
@@ -833,6 +870,10 @@ export class TerminalUI {
     if (command === 'workers') {
       this.showArchivedOnce = args.trim() === 'all';
       return this.showPanel(this.workerPanel);
+    }
+    if (command === 'quote') {
+      await this.quoteMessage(args);
+      return;
     }
     if (command === 'archive') {
       if (this.screen !== 'workers') throw new Error('/archive is only available in the Workers view');

@@ -149,6 +149,7 @@ Tab锛堟垨 Shift+Tab锛夊彧鍦?Manager 鍜?Workers 涓や釜涓荤晫闈�
 | `/checkpoints` | 鏌ョ湅 checkpoint 鍒楄〃 |
 | `/restore id [files\|conversation\|all] confirm` | 鎭㈠ checkpoint锛屽繀椤讳簩娆＄‘璁?|
 | `/turns [manager\|worker_id]` | 鏌ョ湅 provider 鍘熺敓 turns |
+| `/quote [actor:]#seq <instruction>` | 引用 Manager/Worker 历史消息并发送给 Manager；Ctrl+Q 可引用选中文本 |
 | `/fork turn_id [manager\|worker_id]` | 浠庡師鐢?turn fork 瀵硅瘽 |
 | `/revert turn_id --yes [manager\|worker_id]` | 鍘熺敓鍥為€€瀵硅瘽鍘嗗彶锛屼笉鏀规枃浠?|
 | `/quit` | 鍙€€鍑哄綋鍓?TUI锛孧ission Control 鍜?workers 缁х画杩愯 |

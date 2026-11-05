@@ -49,6 +49,11 @@ export async function startControlServer(service, { token, onShutdown = () => {}
         const turns = await service.listConversationTurns(actor, { limit, sortDirection: 'desc', itemsView: 'summary' });
         return json(res, 200, { actor, turns });
       }
+      if (req.method === 'GET' && path === '/conversation/event') {
+        const actor = url.searchParams.get('actor') || 'manager';
+        const seq = Number(url.searchParams.get('seq'));
+        return json(res, 200, { actor, event: service.conversationEvent(actor, seq) });
+      }
       if (req.method === 'GET' && path === '/skills') {
         const actor = url.searchParams.get('actor') || 'manager';
         const skills = await service.listSkills(actor, { forceReload: url.searchParams.get('forceReload') !== 'false' });
@@ -104,7 +109,7 @@ export async function startControlServer(service, { token, onShutdown = () => {}
       }
       if (req.method === 'POST' && path === '/manager/message') {
         const body = await readJson(req);
-        await service.sendManagerMessage(body.text, Boolean(body.interrupt));
+        await service.sendManagerMessage(body.text, Boolean(body.interrupt), body.quotes);
         return json(res, 200, { ok: true });
       }
       if (req.method === 'POST' && path === '/manager/interrupt') {

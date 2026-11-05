@@ -764,6 +764,35 @@ test('/archive all only archives stopped workers and is restricted to Workers vi
   assert.match(ui.notice, /已归档 2 个/);
 });
 
+test('/quote references Manager or Worker history and sends structured metadata', async () => {
+  const { ui, service } = navigationUI();
+  const sent = [];
+  service.projects = [{ code: 'A', root: 'D:/workspaces/a', active: true }];
+  service.conversationEvent = async (actor, seq) => ({
+    seq, actor, time: '2026-11-05T01:02:03.000Z',
+    type: 'message', data: { role: 'assistant', text: `evidence from ${actor}` }
+  });
+  service.sendManagerMessage = async (text, interrupt, quotes) => sent.push({ text, interrupt, quotes });
+  await ui.command('/quote worker_1:#18 explain the risk');
+  assert.match(sent[0].text, /> 引用 worker_1 · #18/);
+  assert.equal(sent[0].interrupt, false);
+  assert.deepEqual(sent[0].quotes, [{
+    project: 'A', actor: 'worker_1', seq: 18, role: 'assistant',
+    time: '2026-11-05T01:02:03.000Z', text: 'evidence from worker_1'
+  }]);
+  assert.equal(ui.screen, 'manager');
+  assert.match(ui.notice, /已引用 worker_1 #18/);
+});
+
+test('Ctrl+Q inserts selected text as a quote block', async () => {
+  const { ui } = navigationUI();
+  ui.input = 'selected evidence';
+  ui.inputSelection = { anchor: 0, focus: ui.input.length };
+  await ui.key('', { name: 'q', ctrl: true });
+  assert.equal(ui.input, '> selected evidence\n\n');
+  assert.match(ui.notice, /已插入引用/);
+});
+
 test('Worker focus separates selection from detail scrolling and preserves positions across conversations', async () => {
   const { ui, service } = navigationUI();
   service.store.history = actor => Array.from({ length: 20 }, (_, seq) => ({ seq: seq + 1, type: 'message', data: { role: 'assistant', text: `${actor} 消息 ${seq}` } }));

@@ -94,14 +94,14 @@ export class MultiProjectService extends EventEmitter {
     return { project: match[1], text: match[2] ?? '' };
   }
 
-  async sendManagerMessage(text, interrupt = false) {
+  async sendManagerMessage(text, interrupt = false, quotes = []) {
     const routed = this.routeInput(text);
     if (routed.project) {
       await this.switchProject(routed.project);
       text = routed.text;
       if (!text) return { project_switched: routed.project };
     }
-    return (await this.ensureProject(this.activeIndex)).sendManagerMessage(text, interrupt);
+    return (await this.ensureProject(this.activeIndex)).sendManagerMessage(text, interrupt, quotes);
   }
 
   async saveSettings(next) {
@@ -116,6 +116,7 @@ export class MultiProjectService extends EventEmitter {
   async createCheckpoint(label) { return (await this.ensureProject(this.activeIndex)).createCheckpoint(label); }
   async listCheckpoints() { return (await this.ensureProject(this.activeIndex)).listCheckpoints(); }
   async conversationTurns(actor, limit) { return (await this.ensureProject(this.activeIndex)).conversationTurns(actor, limit); }
+  async conversationEvent(actor, seq) { return (await this.ensureProject(this.activeIndex)).conversationEvent(actor, seq); }
   async forkConversation(actor, options) { return (await this.ensureProject(this.activeIndex)).forkConversation(actor, options); }
   async revertConversation(actor, beforeTurnId) { return (await this.ensureProject(this.activeIndex)).revertConversation(actor, beforeTurnId); }
   async restoreCheckpoint(id, options) { return (await this.ensureProject(this.activeIndex)).restoreCheckpoint(id, options); }
