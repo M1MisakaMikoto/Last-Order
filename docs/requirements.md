@@ -107,6 +107,12 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - 已委派的工作不得描述成 Manager 正在亲自检查、运行或实现；已知时应说明 Worker 或 task 身份。
 - 每次阶段性回复应明确用户下一步是只需等待，还是需要回答具体问题或做决策。
 
+## Conversation Bottom Padding
+
+- 对话在跟随最新时仍贴底显示；继续向下滚动可越过最后一行，增加约三分之一视口、最多 12 行底部留白。
+- End/Shift+Down 回到最新时恢复无额外留白。
+- 滚动提示会显示当前底部留白行数。
+
 ## Conversation Quotes
 
 - TUI 支持 `/quote #seq 指令` 引用当前 Manager/Worker 会话消息，也支持 `/quote actor:#seq 指令` 跨 actor 引用。
@@ -164,7 +170,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：131 项。
+- 当前自动化测试：132 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

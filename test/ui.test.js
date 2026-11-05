@@ -680,6 +680,24 @@ test('Manager Ctrl+arrows scroll, Shift+arrows jump to top/bottom, and drafts re
   assert.ok(ui.frame(90, 24).some(line => line.includes('继续跟随的新消息')));
 });
 
+test('conversation can overscroll past the last message to leave readable bottom padding', () => {
+  const { ui, service } = navigationUI();
+  service.store.history = () => Array.from({ length: 60 }, (_, i) => ({
+    seq: i + 1, type: 'message', data: { role: 'assistant', text: `padding message ${i}` }
+  }));
+  ui.frame(90, 24);
+  const normalMax = Math.max(0, ui.scrollState.total - ui.scrollState.height);
+  ui.scrollBy(ui.bottomPadding());
+  const frame = ui.frame(90, 24);
+  assert.ok(ui.scrollState.top > normalMax);
+  assert.equal(ui.scrollState.top - normalMax, ui.bottomPadding());
+  assert.match(ui.scrollHint(), /底部留白 \d+ 行/);
+  assert.ok(frame.some(line => line.includes('padding message 59')));
+  ui.scrollTo('bottom');
+  ui.frame(90, 24);
+  assert.equal(ui.scrollState.top, null);
+});
+
 test('Manager arrows navigate submitted input history and restore the unsent draft', async () => {
   const { ui } = navigationUI();
   ui.history = ['第一条需求', '/help', '第三条需求']; ui.historyIndex = ui.history.length;

@@ -439,10 +439,15 @@ export class TerminalUI {
     if (!this.scrollViews.has(this.scrollKey)) this.scrollViews.set(this.scrollKey, { top: null, total: 0, height: 1 });
     return this.scrollViews.get(this.scrollKey);
   }
+  bottomPadding() {
+    const height = this.scrollState.height;
+    return Math.min(12, Math.max(3, Math.floor(height / 3)));
+  }
   scrollBy(delta) {
-    const state = this.scrollState, max = Math.max(0, state.total - state.height);
-    const top = Math.max(0, Math.min(max, (state.top ?? max) + delta));
-    state.top = delta > 0 && top === max ? null : top;
+    const state = this.scrollState, normalMax = Math.max(0, state.total - state.height);
+    const max = normalMax + this.bottomPadding();
+    const top = Math.max(0, Math.min(max, (state.top ?? normalMax) + delta));
+    state.top = delta > 0 && top === normalMax ? null : top;
   }
   scrollWheel(delta) {
     this.scrollBy(delta);
@@ -457,8 +462,11 @@ export class TerminalUI {
     clearInterval(this.selectionAutoTimer); this.selectionAutoTimer = null; this.selectionEdge = 0;
   }
   scrollHint() {
-    const state = this.scrollState, top = state.top ?? Math.max(0, state.total - state.height);
-    return `${state.total ? top + 1 : 0}–${Math.min(state.total, top + state.height)}/${state.total} 行 · ${state.top === null ? '跟随最新' : '历史 · End 回到底部'}`;
+    const state = this.scrollState;
+    const normalMax = Math.max(0, state.total - state.height);
+    const top = Math.min(normalMax + this.bottomPadding(), state.top ?? normalMax);
+    const padding = Math.max(0, top - normalMax);
+    return `${state.total ? Math.min(state.total, top + 1) : 0}–${Math.min(state.total, top + state.height)}/${state.total}${padding ? ` · 底部留白 ${padding} 行` : ''} · ${state.top === null ? '跟随最新' : '历史 · End 回到底部'}`;
   }
   foldDetails(expand, number = 'all') {
     const actor = this.conversationActor;
@@ -1080,8 +1088,9 @@ export class TerminalUI {
     height = Math.max(0, height);
     const state = this.scrollState;
     state.total = content.length; state.height = Math.max(0, height);
-    if (state.top !== null) state.top = Math.min(state.top, Math.max(0, content.length - height));
-    const top = state.top ?? Math.max(0, content.length - height);
+    const normalMax = Math.max(0, content.length - height);
+    if (state.top !== null) state.top = Math.min(state.top, normalMax + this.bottomPadding());
+    const top = state.top ?? normalMax;
     const visible = content.slice(top, top + height);
     // Keep the sender visible when a long message begins above the viewport.
     if (height > 1 && top > 0 && content[top]?.startsWith('│')) {
