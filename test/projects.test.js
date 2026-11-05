@@ -50,6 +50,7 @@ test('multi-project service routes manager messages by -A/-B prefix and lazily s
     return { client: makeClient(project.code), dataDirectory: path.join(project.root, '.git', 'last-order'), configPath: '' };
   });
   await hub.start();
+  assert.equal(hub.snapshot().manager.pending.length, 0);
   await hub.sendManagerMessage('-B inspect this');
   assert.deepEqual(started, ['A', 'B']);
   assert.equal(hub.activeProject.code, 'B');

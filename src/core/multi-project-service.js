@@ -26,6 +26,7 @@ export class MultiProjectService extends EventEmitter {
   get git() { return this.client?.git ?? { root: this.activeProject?.root ?? '' }; }
   get approvals() { return this.client?.approvals ?? new Map(); }
   get questions() { return this.client?.questions ?? new Map(); }
+  snapshot() { return this.state; }
 
   async start() {
     const client = await this.ensureProject(this.activeIndex);
