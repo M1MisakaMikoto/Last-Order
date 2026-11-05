@@ -8,6 +8,8 @@ Last Order 鏄?Windows 涓婄殑 coding-agent 宸ヤ綔鍖猴紝涓€涓?manage
 
 Open a workspace root such as `D:/workspaces`. Last Order scans Git repositories, labels them `-A`, `-B`, and so on, shows up to three projects with `Alt+Up/Down` scrolling, and routes `-A message` or `-B message` to the selected project using Tab completion.
 
+The Last Order activity-bar container also includes the vendored MIT Git Diff view. It supports repository/comparison selection, changed and unchanged file trees, native VS Code diffs, context export, and optional Codex MCP integration without a separate Git Diff Viewer extension.
+
 ## 鍚姩
 
 闇€瑕?Node.js **24+**銆丟it锛屼互鍙婂噯澶囦娇鐢ㄧ殑 CLI锛涙部鐢ㄥ悇 CLI 宸叉湁鐨勭櫥褰曚笌妯″瀷閰嶇疆銆傛湰椤圭洰娌℃湁绗笁鏂?npm 杩愯渚濊禆銆?

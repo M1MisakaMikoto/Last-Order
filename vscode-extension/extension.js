@@ -19,6 +19,7 @@ let statusBar;
 let refreshing = false;
 let lastStatus;
 let managerTuiProvider;
+let gitDiffViewer;
 const seenApprovals = new Set();
 const seenQuestions = new Set();
 let tuiTerminal;
@@ -818,6 +819,13 @@ async function activate(context) {
   context.subscriptions.push(registerCommand('missionControl.sendContext', sendContext));
   context.subscriptions.push(registerCommand('missionControl.switchScreen', switchLastOrderScreen));
   context.subscriptions.push(registerCommand('missionControl.archiveWorker', archiveWorker));
+  try {
+    gitDiffViewer = require('./git-diff-viewer/out/src/extension.js');
+    gitDiffViewer.activate(context);
+    context.subscriptions.push({ dispose: () => gitDiffViewer?.deactivate?.() });
+  } catch (error) {
+    output.appendLine(`Git Diff integration failed: ${error.message}`);
+  }
   refreshTimer = setInterval(() => { void refreshState(); }, 1500);
   context.subscriptions.push({ dispose: () => clearInterval(refreshTimer) });
   const reloadRequested = Boolean(extensionContext.workspaceState?.get?.('missionControl.reloadRequested', false));
@@ -828,6 +836,8 @@ async function activate(context) {
 }
 
 async function deactivate() {
+  gitDiffViewer?.deactivate?.();
+  gitDiffViewer = undefined;
   clearInterval(refreshTimer);
   managerTuiProvider?.stopHost();
   const keepRunning = vscode.workspace.getConfiguration('missionControl').get('keepRunningOnDeactivate', false);

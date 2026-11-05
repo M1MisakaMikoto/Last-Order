@@ -71,6 +71,9 @@ test('VSCode extension registers Last Order commands and worker tree', async () 
     assert.ok(manifest.contributes.keybindings.some(binding =>
       binding.key === 'ctrl+tab' && binding.when.includes('missionControl.managerFocus') && binding.when.includes('webviewId == missionControl.manager')
     ));
+    assert.ok(manifest.contributes.views.missionControl.some(view => view.id === 'missionControl.diff'));
+    const diffController = await readFile(new URL('../vscode-extension/git-diff-viewer/out/src/controller.js', import.meta.url), 'utf8');
+    assert.match(diffController, /const VIEW_ID = "missionControl\.diff"/);
     assert.equal(extension.filterTerminalSelection([
       '────────────────────────',
       '╭─ 用户 · #2 · 14:51:51────────╮',
