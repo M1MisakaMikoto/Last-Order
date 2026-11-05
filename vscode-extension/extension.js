@@ -762,7 +762,7 @@ class WorkerTreeProvider {
     manager.tooltip = 'Open Manager panel';
     manager.iconPath = new vscode.ThemeIcon('account');
     manager.contextValue = 'missionControl.manager';
-    manager.command = { command: 'missionControl.openTui', title: 'Open Control TUI' };
+    manager.command = { command: 'missionControl.openManager', title: 'Open Manager Sidebar' };
     items.push(manager);
     for (const worker of Object.values(this.status.snapshot.workers || {})) {
       if (worker.archivedAt) continue;
@@ -879,7 +879,7 @@ async function activate(context) {
   output = vscode.window.createOutputChannel('Last Order');
   treeProvider = new WorkerTreeProvider();
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 20);
-  statusBar.command = 'missionControl.openTui';
+  statusBar.command = 'missionControl.openManager';
   statusBar.text = '$(radio-tower) LO: off';
   statusBar.show();
   const contentChanged = new vscode.EventEmitter();

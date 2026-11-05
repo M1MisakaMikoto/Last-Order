@@ -80,6 +80,10 @@ test('VSCode extension registers Last Order commands and worker tree', async () 
     assert.match(extensionSource, /attachmentTray/);
     assert.match(extensionSource, /shellArgs: \[script, '--data-directory', status\.data_directory, '--worker', worker\.id\]/);
     assert.doesNotMatch(extensionSource, /terminal\.sendText\(`"\$\{nodeExecutable\(\)\}"/);
+    assert.match(extensionSource, /manager\.command = \{ command: 'missionControl\.openManager'/);
+    assert.match(extensionSource, /statusBar\.command = 'missionControl\.openManager'/);
+    assert.doesNotMatch(extensionSource, /manager\.command = \{ command: 'missionControl\.openTui'/);
+    assert.ok(!manifest.contributes.menus['view/title'].some(item => item.command === 'missionControl.openTui'));
     assert.equal(extension.filterTerminalSelection([
       '────────────────────────',
       '╭─ 用户 · #2 · 14:51:51────────╮',
