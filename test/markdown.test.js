@@ -46,6 +46,22 @@ test('styled fitting preserves OSC 8 links while respecting visible width', () =
   assert.ok(styledWidth(fitted) <= 12);
 });
 
+test('markdown tables render with borders, wrapping and Chinese width handling', () => {
+  const source = [
+    '| | git worktree | 复制整个仓库 |',
+    '|---|---|---|',
+    '| Git 历史 | 与原仓库共享 | 复制一份，成为独立仓库 |',
+    '| 依赖目录 | 新 worktree 需要重新安装 | 如果连 node_modules 一起复制，可能已有 |'
+  ].join('\n');
+  const lines = renderMarkdown(source, 72);
+  const text = lines.join('\n');
+  assert.match(text, /┌/);
+  assert.match(text, /git worktree/);
+  assert.match(text, /与原仓库共享/);
+  assert.doesNotMatch(text, /\|---\|---\|---\|/);
+  for (const line of lines) assert.ok(styledWidth(line) <= 72);
+});
+
 test('markdown allows relative file links but strips dangerous protocols', () => {
   const relative = renderMarkdown('[file](docs/requirements.md)', 80).join('\n');
   assert.match(relative, /\x1b\]8;;docs\/requirements\.md\x1b\\/);

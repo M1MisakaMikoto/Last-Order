@@ -1,5 +1,6 @@
 const cellWidth = char => /\p{Mark}/u.test(char) ? 0
   : /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1faff}]/u.test(char) ? 2 : 1;
+const textWidth = text => Array.from(String(text ?? '')).reduce((sum, char) => sum + cellWidth(char), 0);
 
 export function stripFormatting(text) {
   return String(text ?? '')
@@ -93,12 +94,95 @@ function indentContinuation(segments, prefix, columns) {
   return first.map((line, index) => (index ? ' '.repeat(Math.min(columns, Array.from(prefix).reduce((sum, char) => sum + cellWidth(char), 0))) : prefix) + line);
 }
 
+function splitTableRow(line) {
+  const value = String(line).trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells = [];
+  let cell = '';
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+    if (char === '\\' && value[index + 1] === '|') { cell += '|'; index++; continue; }
+    if (char === '|') { cells.push(cell.trim()); cell = ''; continue; }
+    cell += char;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function tableAlignments(line) {
+  const cells = splitTableRow(line);
+  if (!cells.length || !cells.every(cell => /^:?-{3,}:?$/.test(cell))) return null;
+  return cells.map(cell => cell.startsWith(':') && cell.endsWith(':') ? 'center' : cell.endsWith(':') ? 'right' : 'left');
+}
+
+function plainCell(value) {
+  return stripFormatting(String(value))
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\{\{file:([^}]+)\}\}/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+function wrapCell(value, width) {
+  const lines = [];
+  let line = '', used = 0;
+  for (const char of plainCell(value)) {
+    const size = cellWidth(char);
+    if (used + size > width && line) { lines.push(line); line = ''; used = 0; }
+    line += char; used += size;
+  }
+  lines.push(line);
+  return lines.length ? lines : [''];
+}
+
+function fitCell(value, width, alignment = 'left') {
+  const padding = Math.max(0, width - textWidth(value));
+  if (alignment === 'right') return ' '.repeat(padding) + value;
+  if (alignment === 'center') {
+    const left = Math.floor(padding / 2);
+    return ' '.repeat(left) + value + ' '.repeat(padding - left);
+  }
+  return value + ' '.repeat(padding);
+}
+
+function renderTable(rows, alignments, columns) {
+  const count = Math.max(2, ...rows.map(row => row.length));
+  const normalized = rows.map(row => Array.from({ length: count }, (_, index) => plainCell(row[index] ?? '')));
+  const totalBorder = count * 3 + 1;
+  if (columns < totalBorder + count) {
+    return normalized.map((row, index) => styleSegment({ bold: index === 0 }, row.join(' · ')));
+  }
+  const budget = columns - totalBorder;
+  const widths = Array.from({ length: count }, (_, index) => Math.max(1, ...normalized.map(row => textWidth(row[index]))));
+  while (widths.reduce((sum, width) => sum + width, 0) > budget) {
+    let widest = 0;
+    for (let index = 1; index < count; index++) if (widths[index] > widths[widest]) widest = index;
+    if (widths[widest] <= 1) break;
+    widths[widest]--;
+  }
+  const border = (left, middle, right) => left + widths.map(width => '─'.repeat(width + 2)).join(middle) + right;
+  const output = [border('┌', '┬', '┐')];
+  normalized.forEach((row, rowIndex) => {
+    const wrapped = row.map((cell, index) => wrapCell(cell, widths[index]));
+    const height = Math.max(...wrapped.map(lines => lines.length));
+    for (let line = 0; line < height; line++) {
+      output.push('│ ' + wrapped.map((lines, index) => fitCell(lines[line] ?? '', widths[index], alignments[index] ?? 'left')).join(' │ ') + ' │');
+    }
+    if (rowIndex === 0) output.push(border('├', '┼', '┤'));
+  });
+  output.push(border('└', '┴', '┘'));
+  return output;
+}
+
 export function renderMarkdown(text, columns = 80) {
   columns = Math.max(1, columns);
   const source = stripFormatting(text).replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
+  const sourceLines = source.split('\n');
   const output = [];
   let fenced = false, language = '', codeLines = [];
-  for (const raw of source.split('\n')) {
+  for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
+    const raw = sourceLines[lineIndex];
     if (/^\s*```/.test(raw)) {
       if (!fenced) {
         fenced = true; language = raw.trim().slice(3).trim();
@@ -120,6 +204,20 @@ export function renderMarkdown(text, columns = 80) {
       codeLines.push(raw);
       for (const line of wrapSegments([{ text: raw || ' ' }], Math.max(1, columns - 2))) output.push(styleSegment({ dim: true }, '│ ') + line);
       continue;
+    }
+    if (raw.includes('|')) {
+      const alignments = tableAlignments(sourceLines[lineIndex + 1] ?? '');
+      if (alignments) {
+        const rows = [splitTableRow(raw)];
+        let next = lineIndex + 2;
+        while (next < sourceLines.length && sourceLines[next].trim() && sourceLines[next].includes('|')) {
+          rows.push(splitTableRow(sourceLines[next]));
+          next++;
+        }
+        output.push(...renderTable(rows, alignments, columns));
+        lineIndex = next - 1;
+        continue;
+      }
     }
     if (!raw.trim()) { output.push(''); continue; }
     const heading = /^(#{1,6})\s+(.*)$/.exec(raw);
