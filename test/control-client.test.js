@@ -28,7 +28,7 @@ test('TUI service client mirrors Mission Control state, history and Git operatio
     config: { manager: 'codex', worker: 'codex' },
     snapshot: () => state,
     store: { history: actor => [{ seq: 1, actor, type: 'message', data: { role: 'assistant', text: 'hello' } }] },
-    sendManagerMessage: async (text, interrupt, quotes) => calls.push(['manager', text, interrupt, quotes]),
+    sendManagerMessage: async (text, interrupt, quotes, attachments) => calls.push(['manager', text, interrupt, quotes, attachments]),
     interruptManager: async () => { interrupted++; return { interrupted: true, discarded: 1 }; },
     clearManagerMemory: async () => { memoryClears++; return { cleared: true, previousSessionId: 'old-thread' }; },
     sendWorkerMessage: async (workerId, text) => calls.push(['worker', workerId, text]),
@@ -57,8 +57,8 @@ test('TUI service client mirrors Mission Control state, history and Git operatio
   assert.equal(await client.git.diff({ id: 'w1' }, 'task'), 'diff w1 task');
   assert.equal((await client.git.changedFiles({ id: 'w1' }))[0].status, 'M');
   assert.equal(await client.git.content({ id: 'w1' }, 'src/w1.js', 'base'), 'w1:src/w1.js:base');
-  await client.sendManagerMessage('hello', true, [{ actor: 'w1', seq: 2, text: 'quoted' }]);
-  assert.deepEqual(calls[0], ['manager', 'hello', true, [{ actor: 'w1', seq: 2, text: 'quoted' }]]);
+  await client.sendManagerMessage('hello', true, [{ actor: 'w1', seq: 2, text: 'quoted' }], [{ path: '/tmp/screen.png' }]);
+  assert.deepEqual(calls[0], ['manager', 'hello', true, [{ actor: 'w1', seq: 2, text: 'quoted' }], [{ path: '/tmp/screen.png' }]]);
   assert.deepEqual(await client.interruptManager(), { interrupted: true, discarded: 1 });
   assert.equal(interrupted, 1);
   assert.deepEqual(await client.clearManagerMemory(), { cleared: true, previousSessionId: 'old-thread' });

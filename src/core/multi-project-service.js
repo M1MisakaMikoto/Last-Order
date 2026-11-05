@@ -94,14 +94,14 @@ export class MultiProjectService extends EventEmitter {
     return { project: match[1], text: match[2] ?? '' };
   }
 
-  async sendManagerMessage(text, interrupt = false, quotes = []) {
+  async sendManagerMessage(text, interrupt = false, quotes = [], attachments = []) {
     const routed = this.routeInput(text);
     if (routed.project) {
       await this.switchProject(routed.project);
       text = routed.text;
       if (!text) return { project_switched: routed.project };
     }
-    return (await this.ensureProject(this.activeIndex)).sendManagerMessage(text, interrupt, quotes);
+    return (await this.ensureProject(this.activeIndex)).sendManagerMessage(text, interrupt, quotes, attachments);
   }
 
   async saveSettings(next) {

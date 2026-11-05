@@ -109,7 +109,7 @@ export async function startControlServer(service, { token, onShutdown = () => {}
       }
       if (req.method === 'POST' && path === '/manager/message') {
         const body = await readJson(req);
-        await service.sendManagerMessage(body.text, Boolean(body.interrupt), body.quotes);
+        await service.sendManagerMessage(body.text, Boolean(body.interrupt), body.quotes, body.attachments);
         return json(res, 200, { ok: true });
       }
       if (req.method === 'POST' && path === '/manager/interrupt') {

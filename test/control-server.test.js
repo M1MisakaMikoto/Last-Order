@@ -26,7 +26,7 @@ test('Mission Control control API authenticates clients and dispatches UI action
     config: { manager: 'codex', worker: 'codex' },
     snapshot: () => ({ workers: { w1: { id: 'w1', status: 'running' } }, approvals: [{ id: 'a1' }], questions: [] }),
     store: { history: (actor, limit) => [{ seq: 1, actor, limit, type: 'message', data: { role: 'assistant', text: 'hello' } }] },
-    sendManagerMessage: async (text, interrupt, quotes) => calls.push(['manager', text, interrupt, quotes]),
+    sendManagerMessage: async (text, interrupt, quotes, attachments) => calls.push(['manager', text, interrupt, quotes, attachments]),
     interruptManager: async () => { interrupted++; return { interrupted: true, discarded: 1 }; },
     clearManagerMemory: async () => { memoryClears++; return { cleared: true, previousSessionId: 'old-thread' }; },
     sendWorkerMessage: async (workerId, text, source) => calls.push(['worker', workerId, text, source]),
@@ -71,7 +71,10 @@ test('Mission Control control API authenticates clients and dispatches UI action
   assert.equal((await (await request('GET', '/worker/w1/diff?mode=task')).json()).diff, 'diff w1 task');
   assert.equal((await (await request('GET', '/worker/w1/changed-files')).json()).files[0].status, 'M');
   assert.equal((await (await request('GET', '/worker/w1/content?path=src%2Fw1.js&ref=base')).json()).content, 'w1:src/w1.js:base');
-  await request('POST', '/manager/message', { text: 'hello', quotes: [{ actor: 'w1', seq: 2, text: 'quoted' }] });
+  await request('POST', '/manager/message', {
+    text: 'hello', quotes: [{ actor: 'w1', seq: 2, text: 'quoted' }],
+    attachments: [{ path: '/tmp/screen.png' }]
+  });
   assert.deepEqual(await (await request('GET', '/conversation/event?actor=w1&seq=2')).json(), {
     actor: 'w1', event: { actor: 'w1', seq: 2, type: 'message', data: { role: 'assistant', text: 'quoted' } }
   });
@@ -86,7 +89,7 @@ test('Mission Control control API authenticates clients and dispatches UI action
   await request('POST', '/shutdown');
   await new Promise(resolve => setTimeout(resolve, 20));
   assert.deepEqual(calls, [
-    ['manager', 'hello', false, [{ actor: 'w1', seq: 2, text: 'quoted' }]],
+    ['manager', 'hello', false, [{ actor: 'w1', seq: 2, text: 'quoted' }], [{ path: '/tmp/screen.png' }]],
     ['worker', 'w1', 'inspect', 'user'],
     ['control', 'w1', 'pause', 'check', 'user'],
     ['notes', 'w1', ['review later']],

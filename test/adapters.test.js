@@ -134,7 +134,7 @@ test('Codex conversation turns, fork and revert map to native app-server methods
   assert.deepEqual(calls.pop(), ['thread/revert', { threadId: 'thread-forked', beforeTurnId: 'turn-3' }]);
 });
 
-test('Codex sends skill markers as text for provider-neutral Last Order injection', async () => {
+test('Codex sends skill markers as text and local images as image inputs', async () => {
   const calls = [], events = [];
   const runtime = {
     threadId: 'thread-skills',
@@ -151,10 +151,15 @@ test('Codex sends skill markers as text for provider-neutral Last Order injectio
     }
   };
   Object.setPrototypeOf(runtime, CodexRuntime.prototype);
-  await CodexRuntime.prototype.run.call(runtime, '$pdf summarize this');
+  await CodexRuntime.prototype.run.call(runtime, '$pdf summarize this', {
+    attachments: [{ path: 'C:/images/screen.png', mime: 'image/png' }]
+  });
   assert.deepEqual(calls, [['turn/start', {
     threadId: 'thread-skills',
-    input: [{ type: 'text', text: '$pdf summarize this' }]
+    input: [
+      { type: 'text', text: '$pdf summarize this' },
+      { type: 'localImage', path: 'C:/images/screen.png' }
+    ]
   }]]);
   assert.deepEqual(events.at(-1), { type: 'turn', id: 'turn-skills-1' });
 });

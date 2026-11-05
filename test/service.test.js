@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { MissionControlService } from '../src/core/service.js';
 import { deferred } from '../src/adapters/rpc.js';
@@ -583,6 +583,24 @@ test('quoted Manager messages preserve structured quote metadata in prompts and 
   assert.deepEqual(payload.user_messages[0].quotes, [quote]);
   const input = service.store.history('manager').find(event => event.type === 'manager_input');
   assert.deepEqual(input.data.quotes, [quote]);
+});
+
+test('image attachments are validated, persisted and included in Manager prompts', async t => {
+  let payload;
+  const { service, git } = await fixture(t, async () => {}, {
+    manager: async (_context, prompt) => { payload = JSON.parse(prompt); }
+  });
+  const imagePath = path.join(git.root, 'screen.png');
+  await writeFile(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  await service.sendManagerMessage('Inspect this image', false, [], [{ path: imagePath }]);
+  await waitFor(service, () => !service.managerBusy && payload);
+  const attachment = payload.user_messages[0].attachments[0];
+  assert.equal(attachment.name, 'screen.png');
+  assert.equal(attachment.mime, 'image/png');
+  assert.equal(attachment.size, 4);
+  assert.equal(attachment.path, imagePath);
+  const input = service.store.history('manager').find(event => event.type === 'manager_input');
+  assert.deepEqual(input.data.attachments, [attachment]);
 });
 
 test('Mission Control creates and restores workspace checkpoints with native session references', async t => {

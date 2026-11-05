@@ -36,6 +36,7 @@ await hub.start();
 
 let stopped = false;
 let ui;
+let pendingAttachments = [];
 const cleanup = async () => {
   if (stopped) return;
   stopped = true;
@@ -59,6 +60,12 @@ ui = new TerminalUI(hub, {
   virtualSize: { columns: Number(values.columns), rows: Number(values.rows) },
   settings: hub.config,
   saveSettings: next => hub.saveSettings(next),
+  takeAttachments: () => {
+    const attachments = pendingAttachments;
+    pendingAttachments = [];
+    if (attachments.length) process.send?.({ type: 'attachmentsConsumed' });
+    return attachments;
+  },
   openMonitor: worker => process.send?.({
     type: 'openMonitor', worker,
     project: hub.activeProject.root, dataDirectory: hub.activeProject.dataDirectory
@@ -83,6 +90,7 @@ input.on('line', line => {
     if (message.type === 'switchScreen') void ui.switchScreen();
     if (message.type === 'submitInput') void ui.submitInput();
     if (message.type === 'newlineInput') ui.insertNewline();
+    if (message.type === 'attachments' && Array.isArray(message.attachments)) pendingAttachments = message.attachments;
   } catch (error) {
     process.stderr.write('Invalid webview TUI message: ' + error.message + '\n');
   }

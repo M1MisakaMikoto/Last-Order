@@ -113,6 +113,14 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - End/Shift+Down 回到最新时恢复无额外留白。
 - 滚动提示会显示当前底部留白行数。
 
+## Image Attachments
+
+- VSCode Manager TUI 提供 Attach image 按钮，可选择 PNG、JPEG、GIF、WebP；输入区上方显示缩略图并可移除。
+- 最多同时附加 8 张、单张最多 20 MB；提交下一条普通 Manager 消息时附件随消息发送，slash 命令不会消费附件。
+- Manager 事件与 prompt 保存附件 name、path、mime、size 元数据。
+- Codex 使用官方 App Server `localImage` input；其他 provider 至少获得安全绝对路径元数据，是否支持视觉取决于其能力和模型。
+- 原生 CLI TUI 不显示图片缩略图，VSCode Webview 才提供图片预览。
+
 ## Conversation Quotes
 
 - TUI 支持 `/quote #seq 指令` 引用当前 Manager/Worker 会话消息，也支持 `/quote actor:#seq 指令` 跨 actor 引用。
@@ -173,7 +181,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：132 项。
+- 当前自动化测试：134 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

@@ -90,7 +90,7 @@ export class CodexRuntime {
     }
     if (method === 'error' && !params.willRetry) this.turn?.reject(new Error(params.error?.message ?? 'Codex error'));
   }
-  async run(prompt) {
+  async run(prompt, options = {}) {
     if (this.turn) throw new Error('Codex turn already active');
     this.turn = deferred();
     // Attach a rejection handler before the start response can race a failure.
@@ -98,7 +98,10 @@ export class CodexRuntime {
     try {
       const r = await this.rpc.request('turn/start', {
         threadId: this.threadId,
-        input: [{ type: 'text', text: prompt }]
+        input: [
+          { type: 'text', text: prompt },
+          ...(options.attachments ?? []).map(image => ({ type: 'localImage', path: image.path }))
+        ]
       });
       this.turnId = r.turn.id; await this.turn.promise;
       await this.context.emit({ type: 'turn', id: this.turnId });

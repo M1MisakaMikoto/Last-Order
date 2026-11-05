@@ -701,11 +701,15 @@ export class TerminalUI {
       const routed = this.service.routeInput?.(text);
       if (routed?.project) {
         await this.switchProject(routed.project);
-        if (routed.text) await this.service.sendManagerMessage(routed.text);
+        if (routed.text) {
+          const attachments = this.options.takeAttachments?.() ?? [];
+          await this.service.sendManagerMessage(routed.text, false, [], attachments);
+        }
         return;
       }
       if (this.panel === 'manager') this.scrollTo('bottom');
-      await this.service.sendManagerMessage(text);
+      const attachments = this.options.takeAttachments?.() ?? [];
+      await this.service.sendManagerMessage(text, false, [], attachments);
       return;
     }
     const [command, ...parts] = text.slice(1).split(' '); const args = parts.join(' ').trim();

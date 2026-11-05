@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import { createServer } from 'node:http';
 import { randomUUID, randomBytes } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Store } from './store.js';
 import { MANAGER_TOOLS, WORKER_TOOLS, validate } from './tools.js';
@@ -14,6 +14,8 @@ const id = prefix => prefix + '_' + randomUUID().slice(0, 8);
 const now = () => Date.now();
 const terminal = new Set(['succeeded', 'cancelled']);
 const archivable = new Set(['succeeded', 'failed', 'cancelled', 'interrupted', 'paused', 'blocked_requirements', 'blocked_technical', 'review_failed']);
+const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
 const MANAGER_POLICY_VERSION = '2026-11-04.3';
 function requiresExploreDelegation(text) {
   const value = String(text ?? '');
@@ -589,9 +591,25 @@ export class MissionControlService extends EventEmitter {
     }, 'user');
     return { checkpointId, restoredFiles, forkedConversations };
   }
-  async sendManagerMessage(text, interrupt = false, quotes = []) {
+  async normalizeAttachments(attachments) {
+    if (!Array.isArray(attachments) || !attachments.length) return [];
+    const normalized = [];
+    for (const attachment of attachments.slice(0, 8)) {
+      const extension = path.extname(String(attachment.path ?? '')).toLowerCase();
+      const mime = IMAGE_MIME[extension];
+      if (!mime) throw new Error(`Unsupported image type: ${extension || 'unknown'}`);
+      const filePath = await realpath(path.resolve(String(attachment.path)));
+      const info = await stat(filePath);
+      if (!info.isFile()) throw new Error(`Image attachment is not a file: ${filePath}`);
+      if (info.size > MAX_ATTACHMENT_BYTES) throw new Error(`Image attachment exceeds 20 MB: ${filePath}`);
+      normalized.push({ name: path.basename(filePath), path: filePath, mime, size: info.size });
+    }
+    return normalized;
+  }
+  async sendManagerMessage(text, interrupt = false, quotes = [], attachments = []) {
     if (!text.trim()) throw new Error('Message is empty');
     text = expandIncludes(text, this.git.root);
+    attachments = await this.normalizeAttachments(attachments);
     quotes = Array.isArray(quotes) ? quotes.slice(0, 5).map(quote => ({
       project: String(quote.project ?? '').slice(0, 16),
       actor: String(quote.actor ?? '').slice(0, 120),
@@ -602,9 +620,9 @@ export class MissionControlService extends EventEmitter {
     })) : [];
     const messageId = id('message'), queued = Boolean(this.managerBusy);
     const memoryEpoch = this.state.manager.memoryEpoch ?? 0;
-    this.change('manager_input', { role: 'user', text, interrupt, messageId, queued, memoryEpoch, ...(quotes.length ? { quotes } : {}) }, s => {
+    this.change('manager_input', { role: 'user', text, interrupt, messageId, queued, memoryEpoch, ...(quotes.length ? { quotes } : {}), ...(attachments.length ? { attachments } : {}) }, s => {
       s.manager.hold = false;
-      s.manager.pending.push({ id: messageId, text, interrupt, queued, ...(quotes.length ? { quotes } : {}) });
+      s.manager.pending.push({ id: messageId, text, interrupt, queued, ...(quotes.length ? { quotes } : {}), ...(attachments.length ? { attachments } : {}) });
     }, 'manager');
     this.managerError = null;
     if (interrupt && this.managerBusy) {
@@ -693,7 +711,8 @@ export class MissionControlService extends EventEmitter {
         user_messages: pending, notifications, schedule_table: this.state, prompt_config: this.promptConfig(),
         delegation_policy: delegationPolicy, selected_skills: selectedSkills
       }, null, 2);
-      await runtime.run(prompt);
+      const attachments = pending.flatMap(message => message.attachments ?? []);
+      await runtime.run(prompt, { attachments });
       if (this.isCurrent('manager', epoch)) this.change('manager_processed', { messageIds: pending.map(x => x.id), notificationIds: notifications.map(x => x.id) }, s => {
         const m = new Set(pending.map(x => x.id)), n = new Set(notifications.map(x => x.id));
         s.manager.pending = s.manager.pending.filter(x => !m.has(x.id)); s.notifications = s.notifications.filter(x => !n.has(x.id));

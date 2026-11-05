@@ -12,7 +12,7 @@ test('normal send and interrupt are distinct commands; worker control is explici
   const actions = []; const service = { state: { workers: { w: { id: 'w', workspace: '/test' } } }, sendManagerMessage: async (...args) => actions.push(['manager', ...args]), sendWorkerMessage: async (...args) => actions.push(['worker', ...args]), controlWorker: async (...args) => actions.push(['control', ...args]) };
   const ui = new TerminalUI(service);
   await ui.command('普通消息'); await ui.command('/interrupt 紧急消息'); await ui.command('/w 请先检查工作流'); await ui.command('/pause');
-  assert.deepEqual(actions, [['manager', '普通消息'], ['manager', '紧急消息', true], ['worker', 'w', '请先检查工作流'], ['control', 'w', 'pause', '']]);
+  assert.deepEqual(actions, [['manager', '普通消息', false, [], []], ['manager', '紧急消息', true], ['worker', 'w', '请先检查工作流'], ['control', 'w', 'pause', '']]);
 });
 
 test('/interrupt without text stops the manager without sending or retrying a message', async () => {
@@ -809,6 +809,18 @@ test('Ctrl+Q inserts selected text as a quote block', async () => {
   await ui.key('', { name: 'q', ctrl: true });
   assert.equal(ui.input, '> selected evidence\n\n');
   assert.match(ui.notice, /已插入引用/);
+});
+
+test('image attachments selected in the Webview are consumed by the next Manager message', async () => {
+  const { ui, service } = navigationUI();
+  const attachment = { name: 'screen.png', path: '/tmp/screen.png', mime: 'image/png', size: 123 };
+  let consumed = 0, sent;
+  ui.options.takeAttachments = () => { consumed++; return [attachment]; };
+  service.sendManagerMessage = async (...args) => { sent = args; };
+  ui.input = 'Inspect this screenshot';
+  await ui.key('', { name: 'return' });
+  assert.equal(consumed, 1);
+  assert.deepEqual(sent, ['Inspect this screenshot', false, [], [attachment]]);
 });
 
 test('Worker focus separates selection from detail scrolling and preserves positions across conversations', async () => {

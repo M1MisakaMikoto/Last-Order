@@ -23,6 +23,11 @@ let gitDiffViewer;
 const seenApprovals = new Set();
 const seenQuestions = new Set();
 let tuiTerminal;
+const IMAGE_MIME = {
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif', '.webp': 'image/webp'
+};
+const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 
 class ControlClient {
   constructor(info) {
@@ -268,7 +273,7 @@ function managerTuiHtml(webview) {
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; font-src ${webview.cspSource};">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; font-src ${webview.cspSource}; img-src data: ${webview.cspSource};">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="${asset('node_modules/@xterm/xterm/css/xterm.css')}">
 <style>
@@ -277,10 +282,18 @@ function managerTuiHtml(webview) {
   #overlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; background:color-mix(in srgb, var(--vscode-editor-background) 92%, transparent); color:var(--vscode-foreground); font-family:var(--vscode-font-family); }
   #overlay.visible { display:flex; }
   button { color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; padding:6px 12px; cursor:pointer; }
+  #attachmentDock { position:fixed; right:14px; bottom:66px; display:flex; flex-direction:column; align-items:flex-end; gap:8px; max-width:min(520px,80vw); pointer-events:none; }
+  #attachmentTray { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; pointer-events:auto; }
+  .attachment { position:relative; width:92px; padding:4px; border:1px solid var(--vscode-widget-border, #555); background:var(--vscode-editorWidget-background); border-radius:6px; }
+  .attachment img { display:block; width:82px; height:64px; object-fit:contain; background:var(--vscode-input-background); }
+  .attachment span { display:block; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:11px var(--vscode-font-family); color:var(--vscode-descriptionForeground); }
+  .attachment button { position:absolute; top:-7px; right:-7px; width:20px; height:20px; padding:0; border-radius:50%; font:12px/20px var(--vscode-font-family); }
+  #attachButton { pointer-events:auto; align-self:flex-end; opacity:.85; }
 </style>
 </head>
 <body>
 <div id="terminal"></div>
+<div id="attachmentDock"><div id="attachmentTray"></div><button id="attachButton" title="Attach images">Attach image</button></div>
 <div id="overlay"><span id="message">Last Order TUI stopped.</span><button id="restart">Restart TUI</button></div>
 <script nonce="${nonce}" src="${asset('node_modules/@xterm/xterm/lib/xterm.js')}"></script>
 <script nonce="${nonce}" src="${asset('node_modules/@xterm/addon-fit/lib/addon-fit.js')}"></script>
@@ -307,6 +320,20 @@ function managerTuiHtml(webview) {
     }
   });
   const fit = new FitAddon.FitAddon();
+  const attachmentTray = document.getElementById('attachmentTray');
+  let attachments = [];
+  const renderAttachments = next => {
+    attachments = next || [];
+    attachmentTray.replaceChildren(...attachments.map(attachment => {
+      const item = document.createElement('div'); item.className = 'attachment';
+      const image = document.createElement('img'); image.src = attachment.preview; image.alt = attachment.name;
+      const name = document.createElement('span'); name.textContent = attachment.name; name.title = attachment.path;
+      const remove = document.createElement('button'); remove.textContent = '×'; remove.title = 'Remove image';
+      remove.addEventListener('click', () => vscode.postMessage({ type: 'removeAttachment', path: attachment.path }));
+      item.append(image, name, remove); return item;
+    }));
+  };
+  document.getElementById('attachButton').addEventListener('click', () => vscode.postMessage({ type: 'pickImages' }));
   terminal.loadAddon(fit);
   terminal.open(document.getElementById('terminal'));
   fit.fit();
@@ -366,6 +393,7 @@ function managerTuiHtml(webview) {
   window.addEventListener('message', event => {
     const data = event.data;
     if (data.type === 'output') terminal.write(data.data);
+    if (data.type === 'attachments') renderAttachments(data.attachments);
     if (data.type === 'exit') {
       document.getElementById('message').textContent = data.message || 'Last Order TUI stopped.';
       document.getElementById('overlay').classList.add('visible');
@@ -388,7 +416,7 @@ function filterTerminalSelection(text) {
 }
 
 class ManagerTuiViewProvider {
-  constructor() { this.view = null; this.host = null; }
+  constructor() { this.view = null; this.host = null; this.attachments = []; }
   resolveWebviewView(view) {
     this.view = view;
     view.webview.options = {
@@ -418,6 +446,15 @@ class ManagerTuiViewProvider {
       void vscode.commands.executeCommand('setContext', 'missionControl.managerFocus', Boolean(message.focused));
       return;
     }
+    if (message.type === 'pickImages') {
+      void this.pickImages().catch(error => vscode.window.showErrorMessage(`Attach image failed: ${error.message}`));
+      return;
+    }
+    if (message.type === 'removeAttachment') {
+      this.attachments = this.attachments.filter(attachment => attachment.path !== message.path);
+      this.syncAttachments();
+      return;
+    }
     if (message.type === 'submitInput') {
       if (this.host?.connected) this.host.stdin.write(JSON.stringify({ type: 'submitInput' }) + '\n');
       return;
@@ -429,6 +466,34 @@ class ManagerTuiViewProvider {
     if (!this.host?.connected) return;
     if (message.type === 'input') this.host.stdin.write(JSON.stringify({ type: 'input', data: message.data }) + '\n');
     if (message.type === 'resize') this.host.stdin.write(JSON.stringify({ type: 'resize', columns: message.columns, rows: message.rows }) + '\n');
+  }
+  syncAttachments() {
+    this.view?.webview.postMessage({ type: 'attachments', attachments: this.attachments });
+    if (this.host?.connected) {
+      this.host.stdin.write(JSON.stringify({
+        type: 'attachments',
+        attachments: this.attachments.map(({ preview, ...attachment }) => attachment)
+      }) + '\n');
+    }
+  }
+  async pickImages() {
+    const uris = await vscode.window.showOpenDialog({
+      canSelectMany: true,
+      openLabel: 'Attach images',
+      filters: { Images: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }
+    });
+    if (!uris?.length) return;
+    for (const uri of uris.slice(0, 8)) {
+      if (this.attachments.length >= 8) break;
+      const filePath = uri.fsPath;
+      const mime = IMAGE_MIME[path.extname(filePath).toLowerCase()];
+      if (!mime || this.attachments.some(attachment => attachment.path === filePath)) continue;
+      const info = await fsp.stat(filePath);
+      if (!info.isFile() || info.size > MAX_IMAGE_BYTES) continue;
+      const preview = `data:${mime};base64,${(await fsp.readFile(filePath)).toString('base64')}`;
+      this.attachments.push({ name: path.basename(filePath), path: filePath, mime, size: info.size, preview });
+    }
+    this.syncAttachments();
   }
   async startHost() {
     if (this.host || !this.view) return;
@@ -445,6 +510,10 @@ class ManagerTuiViewProvider {
     host.on('message', message => {
       if (message.type === 'openMonitor') void openMonitor(message.worker, message);
       if (message.type === 'disconnected') this.view?.webview.postMessage({ type: 'exit', message: 'Last Order backend disconnected.' });
+      if (message.type === 'attachmentsConsumed') {
+        this.attachments = [];
+        this.view?.webview.postMessage({ type: 'attachments', attachments: [] });
+      }
     });
     host.on('exit', code => {
       if (this.host === host) this.host = null;
@@ -463,6 +532,8 @@ class ManagerTuiViewProvider {
   stopHost() {
     if (!this.host) return;
     const host = this.host;
+    this.attachments = [];
+    this.view?.webview.postMessage({ type: 'attachments', attachments: [] });
     this.host = null;
     try { host.disconnect(); } catch {}
     try { host.kill(); } catch {}

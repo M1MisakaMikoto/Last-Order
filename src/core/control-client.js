@@ -148,7 +148,7 @@ export class ServiceClient extends EventEmitter {
   }
 
   snapshot() { return this.state; }
-  async sendManagerMessage(text, interrupt = false, quotes = []) { await this.request('POST', '/manager/message', { text, interrupt, quotes }); await this.refresh(); }
+  async sendManagerMessage(text, interrupt = false, quotes = [], attachments = []) { await this.request('POST', '/manager/message', { text, interrupt, quotes, attachments }); await this.refresh(); }
   async interruptManager() { const result = await this.request('POST', '/manager/interrupt', {}); await this.refresh(); return result; }
   async clearManagerMemory() { const result = await this.request('POST', '/manager/memory/clear', {}); await this.refresh(); return result; }
   async sendWorkerMessage(workerId, message) { await this.request('POST', `/worker/${encodeURIComponent(workerId)}/message`, { text: message }); await this.refresh(); }

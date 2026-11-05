@@ -218,3 +218,5 @@ Claude Code `2.1.316`銆丏SH `0.2.1-rc.5`銆丱penCode `1.19.5` 宸插畨瑁呭
 manager 鐨勮亴璐ｉ€氳繃鎸囦护鍜屽悇杞戒綋鍙敤鐨勯檺鍒剁害鏉燂細Codex 浣跨敤鍙娌欑骞舵嫆缁濆崌绾ф潈闄愶紱Claude 绂佺敤鍐欏叆銆佸懡浠や笌鍘熺敓濮旀淳宸ュ叿锛汷penCode 瀵?manager 鎷掔粷 edit/bash/task锛汥SH 鐩墠渚濊禆瑙掕壊鎸囦护锛屽苟鎷掔粷浜ゅ埌瀹㈡埛绔殑鍐欏叆鎴栨墽琛屽鎵癸紝灏氭湭楠岃瘉鍏跺叏閮ㄥ師鐢熷伐鍏风殑涓ユ牸鐧藉悕鍗曘€?
 棣栫増鏂囦欢棰勮涓婇檺涓?256 KB锛屼笉鎻愪緵缂栬緫鍣ㄦ垨鍘熺敓缁堢宓屽銆傚伐浣滃尯鍜?Git 椤甸潰鎸夐渶鍒锋柊锛涘璇濄€佺姸鎬佷笌瀹℃壒瀹炴椂鏇存柊銆傛湭鎻愪緵瀹夎鍣ㄦ垨鎵撳寘鍚庣殑 Windows `.exe`銆?
 闇€姹備笌璁捐鍘嗗彶瑙?[闇€姹傝褰昡(docs/requirements.md)銆乕绯荤粺璁捐](docs/architecture.md)銆乕CLI 鎺ュ叆璇佹嵁](docs/cli-integration.md)銆乕ADR](docs/adr/)銆?
+
+- VSCode Manager TUI supports up to eight PNG/JPEG/GIF/WebP attachments with thumbnail previews; Codex receives them as native `localImage` inputs.

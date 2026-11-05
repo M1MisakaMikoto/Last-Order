@@ -40,5 +40,8 @@ export function eventContent(event) {
     return parts.length ? parts.join('\n\n') : String(data.text ?? '');
   }
   const text = data.text ?? data.message ?? data.summary ?? JSON.stringify(data, null, 2);
-  return event.type === 'reported_result' ? `${data.status}\n${text}${data.evidence ? '\n\n验证证据：\n' + data.evidence : ''}` : text;
+  const attachmentText = data.attachments?.length
+    ? '\n\nImage attachments:\n' + data.attachments.map(image => `- ${image.name} (${image.mime}, ${image.path})`).join('\n')
+    : '';
+  return event.type === 'reported_result' ? `${data.status}\n${text}${data.evidence ? '\n\n验证证据：\n' + data.evidence : ''}${attachmentText}` : text + attachmentText;
 }
