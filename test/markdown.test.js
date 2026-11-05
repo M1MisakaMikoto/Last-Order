@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderMarkdown, styledWidth, stripFormatting } from '../src/markdown.js';
+import { fitStyled } from '../src/conversation-view.js';
 
 test('markdown renders ANSI formatting, lists, code blocks and OSC 8 links', () => {
   const lines = renderMarkdown([
@@ -35,6 +36,14 @@ test('file mentions render as underlined clickable paths with line anchors', () 
   assert.match(text, /src\/app\.ts#L10-L20/);
   assert.match(text, /src\/other\.ts#L3/);
   assert.match(text, /\x1b\[4m/);
+});
+
+test('styled fitting preserves OSC 8 links while respecting visible width', () => {
+  const styled = '\x1b]8;;docs/app.ts#L3\x1b\\\x1b[4mapp.ts\x1b[0m\x1b]8;;\x1b\\ tail';
+  const fitted = fitStyled(styled, 12);
+  assert.match(fitted, /\x1b\]8;;docs\/app\.ts#L3/);
+  assert.match(fitted, /\x1b\[4m/);
+  assert.ok(styledWidth(fitted) <= 12);
 });
 
 test('markdown allows relative file links but strips dangerous protocols', () => {

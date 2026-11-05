@@ -126,6 +126,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - 文件提及支持 `{{file:src/app.ts#L10-L20}}`，行内代码路径如 `src/app.ts:10-20` 也会自动变成下划线链接。
 - 点击文件链接会在 VSCode 打开文件并选中指定行；绝对路径和相对当前工作区路径都支持。
 - 原生终端是否支持 OSC 8 点击取决于终端；不支持时仍可用鼠标选择/Ctrl+C 复制。
+- TerminalUI framing 使用样式保留宽度裁剪，不得在 `fit()` 阶段剥离 SGR/OSC 8；最终帧必须保留文件链接、颜色和下划线。
 
 ## Image Attachments
 
@@ -195,7 +196,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：135 项。
+- 当前自动化测试：137 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

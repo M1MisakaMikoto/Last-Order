@@ -1,7 +1,7 @@
 import { emitKeypressEvents } from 'node:readline';
 import path from 'node:path';
 import { conversationGroups, eventContent } from './conversation.js';
-import { clean, fit, wrap, width, border, renderConversation } from './conversation-view.js';
+import { clean, fit, fitStyled, wrap, width, border, renderConversation } from './conversation-view.js';
 export { clean, fit, wrap };
 import { TerminalInput } from './terminal-input.js';
 import { commandCompletions, fileQuery } from './commands.js';
@@ -1197,7 +1197,7 @@ export class TerminalUI {
   frame(columns, rows) {
     const state = this.service.snapshot(), lines = [];
     this.lastConversationView = null;
-    const add = text => lines.push(fit(text, columns));
+    const add = text => lines.push(fitStyled(text, columns));
     for (const line of this.headerLines(state, columns, rows)) add(line);
     const pending = [...state.approvals.map(a => `审批 ${a.id} [${a.actor}] · /approval ${a.id} 查看`), ...state.questions.map(q => `问题 ${q.id} [${q.actor}] · /question ${q.id} 查看`)];
     const pendingLines = pending.slice(0, Math.min(5, Math.max(1, rows - 12)));

@@ -12,6 +12,33 @@ export function fit(text, columns) {
   }
   return result + ' '.repeat(Math.max(0, columns - used));
 }
+
+export function fitStyled(text, columns) {
+  const source = String(text ?? '').replace(/\r?\n/g, ' ');
+  const escapePattern = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\]8;;[^\x07\x1b]*(?:\x07|\x1b\\))/g;
+  let used = 0, result = '', last = 0, match, hasStyle = false, linkOpen = false;
+  const appendPlain = value => {
+    for (const char of value) {
+      const size = width(char);
+      if (used + size > columns) return false;
+      result += char; used += size;
+    }
+    return true;
+  };
+  while ((match = escapePattern.exec(source))) {
+    if (!appendPlain(source.slice(last, match.index))) break;
+    const escape = match[0];
+    result += escape; hasStyle = true;
+    if (escape.startsWith('\x1b]8;;')) linkOpen = !escape.startsWith('\x1b]8;;\x1b\\');
+    last = escapePattern.lastIndex;
+  }
+  if (last < source.length) appendPlain(source.slice(last));
+  if (hasStyle) {
+    result += '\x1b[0m';
+    if (linkOpen) result += '\x1b]8;;\x1b\\';
+  }
+  return result + ' '.repeat(Math.max(0, columns - used));
+}
 export function wrap(text, columns) {
   columns = Math.max(1, columns);
   const lines = [];

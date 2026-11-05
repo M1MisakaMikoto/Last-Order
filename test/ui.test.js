@@ -861,6 +861,18 @@ test('messages have separate role borders and indented multiline bodies, includi
   assert.ok(lines.filter(Boolean).every(line => line === fit(line, 60)), 'borders remain aligned with Chinese text');
 });
 
+test('Manager frame preserves clickable file and copy-code OSC 8 links', () => {
+  const { ui, service } = navigationUI();
+  service.store.history = () => [{
+    seq: 7, type: 'message',
+    data: { role: 'assistant', text: 'Open [app.ts](src/app.ts#L10-L12)\n\n```bash\ngit status\n```' }
+  }];
+  const frame = ui.frame(100, 30).join('\n');
+  assert.match(frame, /\x1b\]8;;src\/app\.ts#L10-L12/);
+  assert.match(frame, /\x1b\]8;;lastorder-copy:/);
+  assert.match(frame, /\[copy code\]/);
+});
+
 test('Manager view shows only user-manager conversation while status rows summarize workers and callbacks', () => {
   const { ui, service, state } = navigationUI();
   state.managerBusy = true;
