@@ -101,6 +101,13 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - Manager 系统规则要求每次完成/失败回调都做出明确的用户汇报决策：要么汇报结果、证据、行为变化和风险，要么明确说明为什么不需要用户操作。
 - Manager 可通过 `inspect_worker_history(worker_id, before_seq, limit, types)` 分页读取 worker 事件历史。
 
+## Parallel Worker Scheduling
+
+- Manager 必须识别同一用户请求中的独立工作流，并立即并行启动多个 Worker。
+- 只有存在真实数据、提交或顺序依赖时才串行。
+- 自动启动的 Explore Worker 只阻塞依赖其结论的任务，不阻塞其他可独立开展的工作。
+- Manager 应向用户明确说明哪些 Worker 已并行启动，以及当前等待的是哪一个依赖。
+
 ## Factual Manager Reporting
 
 - Manager 必须区分自己的动作（需求对齐、规划、拆解）和 Worker 的动作（探索、实现、测试、审查）。

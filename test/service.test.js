@@ -387,6 +387,8 @@ test('manager auto-delegates concrete archive analysis but answers pure concepts
   assert.equal(delegated.delegation_policy.requires_explore, true);
   assert.match(delegated.delegation_policy.instruction, /Report activity factually/);
   assert.match(delegated.delegation_policy.instruction, /Never say you are inspecting/);
+  assert.equal(delegated.parallelism_policy.max_workers, 4);
+  assert.match(delegated.parallelism_policy.instruction, /started in parallel/);
   assert.equal(delegated.delegation_policy.policy_version, '2026-11-04.3');
   assert.equal(delegated.prompt_config.managerPolicyVersion, '2026-11-04.3');
   assert.equal(delegated.delegation_policy.auto_started.worker_kind, 'explore');
@@ -447,6 +449,7 @@ test('Mission Control separates staff prompt configuration from system rules and
   assert.match(service.managerInstructions(), /ask the user whether to archive that completed worker or provide a new requirement/);
   assert.match(service.managerInstructions(), /keep interactive work with the manager/);
   assert.match(service.managerInstructions(), /Never claim that you are inspecting files/);
+  assert.match(service.managerInstructions(), /multiple independent workstreams/);
 
   await service.invoke('manager', service.state.manager.epoch, 'start_worker', {
     title: 'Prompt config', prompt: 'Inspect the worker prompt'

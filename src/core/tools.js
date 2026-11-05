@@ -4,7 +4,7 @@ const object = (properties, required = []) => ({ type: 'object', properties, req
 const tool = (name, description, properties, required) => ({ name, description, inputSchema: object(properties, required) });
 export const PROVIDERS = ['claude', 'codex', 'dsh', 'opencode'];
 export const MANAGER_TOOLS = [
-  tool('start_worker', 'Start one standalone worker task for concrete executable work or repository exploration/research requested by the user. Use kind=explore for read-only investigation, toolchain and test discovery. Mission Control does not auto-chain pipelines; when this worker finishes, inspect its result and manager notes, then decide the next worker. Use input_worker_id to continue from a completed worker commit.', {
+  tool('start_worker', 'Start one standalone worker task for concrete executable work or repository exploration/research requested by the user. Use kind=explore for read-only investigation, toolchain and test discovery. Mission Control does not auto-chain pipelines. Start independent tasks in parallel immediately; when a worker finishes, inspect its result and manager notes, then decide dependent follow-ups. Use input_worker_id to continue from a completed worker commit.', {
     title: string, prompt: string, requirement: string, provider: { enum: PROVIDERS }, model: string, effort: string,
     kind: { enum: ['implement', 'review', 'integrate', 'explore'] }, request_id: string, input_worker_id: string,
     notes: { type: 'array', maxItems: 20, items: string }
