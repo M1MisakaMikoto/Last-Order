@@ -7,7 +7,7 @@ import { launch, terminate } from '../core/process.js';
 import { deferred } from './rpc.js';
 
 export function claudeArgs(context, configPath) {
-  const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose', '--permission-prompt-tool', 'stdio', '--mcp-config', configPath, '--append-system-prompt', context.instructions];
+  const args = ['-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--verbose', '--permission-prompt-tool', 'stdio', '--mcp-config', configPath, '--append-system-prompt', context.instructions];
   if (context.model) args.push('--model', context.model);
   if (context.effort) args.push('--effort', context.effort);
   if (context.sessionId) args.push('--resume', context.sessionId);
@@ -28,6 +28,8 @@ export class ClaudeRuntime {
   }
   constructor(context, command, args) {
     this.context = context; this.controls = new Map();
+    this.streamBlocks = new Map(); this.sawPartialMessages = false;
+    this.messageQueue = Promise.resolve();
     this.child = launch(command, args, { cwd: context.cwd, guard: true });
     this.child.stdin.on('error', e => this.fail(e));
     this.child.once('error', e => this.fail(e));
@@ -35,7 +37,10 @@ export class ClaudeRuntime {
     this.child.stderr.on('data', b => { this.stderr = ((this.stderr ?? '') + b).slice(-4000); });
     this.lines = createInterface({ input: this.child.stdout });
     this.lines.on('line', line => {
-      try { const message = JSON.parse(line); Promise.resolve(this.message(message)).catch(e => this.fail(e)); }
+      try {
+        const message = JSON.parse(line);
+        this.messageQueue = this.messageQueue.then(() => this.message(message)).catch(e => this.fail(e));
+      }
       catch (e) { this.fail(new Error('Invalid Claude protocol: ' + e.message)); }
     });
   }
@@ -49,6 +54,10 @@ export class ClaudeRuntime {
   }
   async message(msg) {
     await this.context.emit({ type: 'activity', method: msg.type });
+    if (msg.type === 'stream_event') {
+      this.sawPartialMessages = true;
+      await this.streamEvent(msg);
+    }
     if (msg.type === 'control_response') {
       const p = this.controls.get(msg.response.request_id);
       if (msg.response.subtype === 'error') p?.reject(new Error(msg.response.error)); else p?.resolve(msg.response.response);
@@ -56,11 +65,15 @@ export class ClaudeRuntime {
     if (msg.type === 'system' && msg.session_id) { this.sessionId = msg.session_id; await this.context.emit({ type: 'session', id: msg.session_id }); }
     if (msg.type === 'assistant') {
       for (const block of msg.message?.content ?? []) {
-        if (block.type === 'text') await this.context.emit({ type: 'message', text: block.text });
+        if (block.type === 'text' && !this.sawPartialMessages) await this.context.emit({ type: 'message', text: block.text });
         if (block.type === 'tool_use') await this.context.emit({ type: 'message', role: 'tool', text: `${block.name}: ${JSON.stringify(block.input).slice(0, 4000)}` });
       }
     }
     if (msg.type === 'result') {
+      for (const [index, stream] of this.streamBlocks) {
+        await this.context.emit({ type: 'message', id: stream.id, text: stream.text, role: 'assistant', streaming: false });
+        this.streamBlocks.delete(index);
+      }
       if (msg.session_id) await this.context.emit({ type: 'session', id: msg.session_id });
       msg.is_error ? this.turn?.reject(new Error(msg.result ?? msg.errors?.join('\n') ?? 'Claude turn failed')) : this.turn?.resolve();
     }
@@ -83,13 +96,34 @@ export class ClaudeRuntime {
       this.write({ type: 'control_response', response: { subtype: 'success', request_id: msg.request_id, response } });
     }
   }
+  async streamEvent(msg) {
+    const event = msg.event ?? {};
+    const index = event.index ?? 0;
+    if (event.type === 'content_block_start' && event.content_block?.type === 'text') {
+      const stream = { id: randomUUID(), text: '' };
+      this.streamBlocks.set(index, stream);
+      await this.context.emit({ type: 'message', id: stream.id, text: '', role: 'assistant', streaming: true });
+    } else if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+      const stream = this.streamBlocks.get(index) ?? { id: randomUUID(), text: '' };
+      stream.text += event.delta.text ?? '';
+      this.streamBlocks.set(index, stream);
+      await this.context.emit({ type: 'message', id: stream.id, text: stream.text, role: 'assistant', streaming: true });
+    } else if (event.type === 'content_block_stop') {
+      const stream = this.streamBlocks.get(index);
+      if (stream) {
+        await this.context.emit({ type: 'message', id: stream.id, text: stream.text, role: 'assistant', streaming: false });
+        this.streamBlocks.delete(index);
+      }
+    }
+  }
   fail(error) { if (this.closed) return; this.closed = true; this.turn?.reject(error); for (const p of this.controls.values()) p.reject(error); }
   async run(prompt) {
     if (this.closed) throw new Error('Claude transport closed');
     if (this.turn) throw new Error('Claude turn already active');
+    this.streamBlocks.clear(); this.sawPartialMessages = false;
     this.turn = deferred();
     this.write({ type: 'user', message: { role: 'user', content: prompt }, parent_tool_use_id: null, session_id: this.sessionId ?? '' });
-    try { await this.turn.promise; } finally { this.turn = null; }
+    try { await this.turn.promise; } finally { this.streamBlocks.clear(); this.sawPartialMessages = false; this.turn = null; }
   }
   async stop() { this.fail(new Error('Claude stopped')); await terminate(this.child); this.lines.close(); }
 }

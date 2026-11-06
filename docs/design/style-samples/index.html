@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Last Order · A / TUI 布局核对</title>
+<style>
+:root{color-scheme:dark;font:14px/1.6 system-ui,"Microsoft YaHei",sans-serif;background:#151517;color:#e7e7e8}*{box-sizing:border-box}body{max-width:1400px;margin:auto;padding:28px 24px}h1{font-size:22px;font-weight:550}p{color:#aaaab1}a{color:#c1c9df}button,select{font:inherit;color:inherit;background:#272729;border:1px solid #45454b;border-radius:4px;padding:5px 10px}label{margin-right:14px}.stage{overflow:auto;margin:18px 0 26px}iframe{display:block;width:504px;max-width:100%;height:900px;border:1px solid #45454b;background:#1c1c1e}details{border-top:1px solid #45454b;padding:14px 0}summary{cursor:pointer}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:20px;overflow:auto}.comparison>div{min-width:0}pre{font:13px/1.5 Consolas,"Microsoft YaHei",monospace;white-space:pre;overflow:auto;background:#1c1c1e;padding:10px}img{max-width:100%;height:auto;vertical-align:top}h3{font-size:14px;font-weight:500}@media(max-width:700px){.comparison{grid-template-columns:1fr}body{padding:16px}}
+</style><h1>A · 墨黑配色，原 TUI 内容和布局</h1>
+<p>旧样板的标签按钮、欢迎标题、任务卡片和输入工具栏已撤下。下方直接加载产品代码，标题、项目、状态、提示使用原 TUI 的同一组规则。窄栏按原规则换行，项目显示完整路径。</p>
+<label>宽度 <select id="width"><option>320</option><option selected>504</option><option>1200</option></select></label>
+<label>状态 <select id="scenario"><option value="idle">单项目空闲</option><option value="default">Manager / 有任务</option><option value="worker">Workers</option><option value="settings">设置</option><option value="commands">帮助</option></select></label>
+<p>点击预览内输入区：Ctrl+Tab 切换，F1–F6、/ 命令、↑↓ 历史、Shift+Enter 换行。普通输入发给 Manager。数据为本地演示。</p>
+<div class="stage"><iframe title="原生 Webview，复用 TUI 控制器" src="native-preview.html?scenario=idle"></iframe></div>
+<p>验证：57 个状态的内容对照与键盘检查通过。以下是相同数据下的原 TUI 文本和浏览器截图。真实 VS Code 宿主尚未验收：隔离开发宿主启动被 vscode-updating 更新锁阻止。</p>
+<details><summary>单项目空闲 · 320px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Manager                    
+  项目  -[A] D:/workspaces/SA *         
+  状态  Manager 就绪 · 0 个任务待处理 · 
+        0 个 Worker 正在工作            
+  提示  ↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 
+        滚动 · Ctrl+Tab · /help         
+────────────────────────────────────────
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+0–0/0 · 跟随最新 | Enter → Manager · Shi
+────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令               </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/single-project-idle.png" alt="单项目空闲 · 320px"></div></div></details>
+<details><summary>Manager · 1200px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Manager                                                                                                                                      
+  项目  -[A] /workspace/rebuildv3/AgentSupport *                                                                                                          
+        -[B] /workspace/mobile-preview                                                                                                                    
+  状态  Manager 就绪 · 1 个任务待处理 · 1 个 Worker 正在工作                                                                                              
+  提示  ↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 滚动 · Shift+↑↓ 顶部/底部 · PgUp/PgDn · Ctrl+Tab · F5 · /help                                                     
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+╭─ 用户 · #1 · 19:43:24──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  实现一个简单的计算器，并给移动端做一版交互预览。                                                                                                      │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                          
+╭─ Manager · #2 · 19:43:24───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  我会把实现和独立验收拆成两个 worker，并保持需求判断与最终验收由 manager 负责。                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                          
+╭─ Manager · #4 · 19:43:24───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  实现 worker 已启动，正在独立 worktree 中开发。                                                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                          
+╭─ Manager · #7 · 19:43:24───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│  初版实现已完成。验收 worker 正在检查除零、键盘输入和窄屏布局。                                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+                                                                                                                                                          
+审批 approval_demo [worker_a1] · /approval approval_demo 查看                                                                                             
+1–15/15 · 跟随最新 | Enter → Manager · Shift+Enter → 换行                                                                                                 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令                                                                                                                                 </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/manager.png" alt="Manager · 1200px"></div></div></details>
+<details><summary>Workers · 320px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Workers                    
+  项目  -[A] /workspace/rebuildv3/AgentS
+        upport *                        
+        -[B] /workspace/mobile-preview  
+  状态  Manager 就绪 · 1 个任务待处理 · 
+        1 个 Worker 正在工作            
+  提示  F6 焦点 · ↑↓ 选择/滚动 · Alt+↑↓ 
+        项目 · Ctrl+Tab · /help         
+────────────────────────────────────────
+╭─ Worker 列表 1/2 ·───────────────────╮
+│ ▶ 运行中 · Calculator UI             │
+│   排队 · Adversarial review          │
+╰──────────────────────────────────────╯
+────────────────────────────────────────
+╭─ Worker 详情 · 对话──────────────────╮
+│ [对话]  工作区   Git   ←→            │
+│ worker_a1 · 运行中 · codex / impleme │
+│ 任务：Calculator UI                  │
+│ 备注：Check mobile layout            │
+│ ╭─ 用户 · #11 · 19:43:24───────────╮ │
+│ │  实现计算器并运行验证。          │ │
+│ ╰──────────────────────────────────╯ │
+│                                      │
+│ ╭─ Worker · #12 · 19:43:24─────────╮ │
+│ │  先检查仓库结构，然后实现自包含  │ │
+│ │  页面。                          │ │
+│ ╰──────────────────────────────────╯ │
+│                                      │
+│ ╭─ + 后台过程 #1 · 1 条 · commandEx╮ │
+│ │  已折叠 · /expand 1 展开 · F5    │ │
+│ │  展开全部                        │ │
+│ ╰──────────────────────────────────╯ │
+│                                      │
+│ ╭─ 任务结果 · #14 · 19:43:24───────╮ │
+│ │  succeeded                       │ │
+│ │  计算器实现并验证完成            │ │
+│ │                                  │ │
+│ │  验证证据：                      │ │
+│ │  12 tests passed; browser smoke  │ │
+│ │   checked                        │ │
+│ ╰──────────────────────────────────╯ │
+╰──────────────────────────────────────╯
+审批 approval_demo [worker_a1] · /approv
+1–22/22 · 跟随最新 | Enter → Manager · S
+────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令               </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/worker.png" alt="Workers · 320px"></div></div></details>
+<details><summary>Worker 工具详情 · 504px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Workers                                            
+  项目  -[A] /workspace/rebuildv3/AgentSupport *                
+        -[B] /workspace/mobile-preview                          
+  状态  Manager 就绪 · 1 个任务待处理 · 1 个 Worker 正在工作    
+  提示  F6 焦点 · ↑↓ 选择/滚动 · Ctrl+↑↓/PgUp/PgDn 滚详情 · Shif
+        t+↑↓ 顶部/底部 · Alt+↑↓ 项目 · Ctrl+Tab · /help         
+────────────────────────────────────────────────────────────────
+╭─ Worker 列表 1/2 ·───────────────────────────────────────────╮
+│ ▶ 运行中 · Calculator UI                                     │
+│   排队 · Adversarial review                                  │
+╰──────────────────────────────────────────────────────────────╯
+────────────────────────────────────────────────────────────────
+╭─ Worker 详情 · 对话──────────────────────────────────────────╮
+│ [对话]  工作区   Git   ←→                                    │
+│ worker_a1 · 运行中 · codex / implement                       │
+│ 任务：Calculator UI                                          │
+│ 备注：Check mobile layout                                    │
+│ ╭─ − 后台过程 #2 · 1 条 · inspect──────────────────────────╮ │
+│ │  工具 · inspect · 失败 · 12345678 · #200                 │ │
+│ │    参数：                                                │ │
+│ │    {                                                     │ │
+│ │      "path": "src/app.js"                                │ │
+│ │    }                                                     │ │
+│ │                                                          │ │
+│ │    退出码：1                                             │ │
+│ │                                                          │ │
+│ │    耗时：123 ms                                          │ │
+│ │                                                          │ │
+│ │    结果：                                                │ │
+│ │    See src/app.js#L2-L3                                  │ │
+│ │                                                          │ │
+│ │  ┌─ js                                                   │ │
+│ │  │   const value = "复制中文";                           │ │
+│ │  └─                                                      │ │
+│ │  [copy code]                                             │ │
+│ │                                                          │ │
+│ │    错误：                                                │ │
+│ │    Check the complete output                             │ │
+│ │                                                          │ │
+│ │  /collapse 2 收起                                        │ │
+│ ╰──────────────────────────────────────────────────────────╯ │
+╰──────────────────────────────────────────────────────────────╯
+审批 approval_demo [worker_a1] · /approval approval_demo 查看   
+34–57/57 · 跟随最新 | Enter → Manager · Shift+Enter → 换行      
+────────────────────────────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令                                       </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/worker-rich-tool.png" alt="Worker 工具详情 · 504px"></div></div></details>
+<details><summary>Workers 窗口重排 · 1200px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Workers                                                                                                                                      
+  项目  -[A] /workspace/rebuildv3/AgentSupport *                                                                                                          
+        -[B] /workspace/mobile-preview                                                                                                                    
+  状态  Manager 就绪 · 1 个任务待处理 · 1 个 Worker 正在工作                                                                                              
+  提示  F6 焦点 · ↑↓ 选择/滚动 · Ctrl+↑↓/PgUp/PgDn 滚详情 · Shift+↑↓ 顶部/底部 · Alt+↑↓ 项目 · Ctrl+Tab · /help                                           
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+╭─ Worker 列表 7/7 ·─────────────────╮ │ ╭─ Worker 详情 · 对话───────────────────────────────────────────────────────────────────────────────────────────╮
+│   Calculator UI                    │ │ │ [对话]  工作区   Git   ←→                                                                                     │
+│   运行中 · codex/deepseek-flash /  │ │ │ worker_extra_4 · 等待审批 · codex / review                                                                    │
+│   worker_a1                        │ │ │ 任务：任务 4                                                                                                  │
+│   Adversarial review               │ │ │ ╭─ 用户 · #11 · 19:43:24────────────────────────────────────────────────────────────────────────────────────╮ │
+│   失败 · codex / review            │ │ │ │  实现计算器并运行验证。                                                                                   │ │
+│   worker_b2                        │ │ │ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│   任务 0                           │ │ │                                                                                                               │
+│   已暂停 · codex/test-model / revi │ │ │ ╭─ Worker · #12 · 19:43:24──────────────────────────────────────────────────────────────────────────────────╮ │
+│   worker_extra_0                   │ │ │ │  先检查仓库结构，然后实现自包含页面。                                                                     │ │
+│   任务 1                           │ │ │ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│   已完成 · codex/test-model / revi │ │ │                                                                                                               │
+│   worker_extra_1                   │ │ │ ╭─ + 后台过程 #1 · 1 条 · commandExecution──────────────────────────────────────────────────────────────────╮ │
+│   任务 2                           │ │ │ │  已折叠 · /expand 1 展开 · F5 展开全部                                                                    │ │
+│   已中断 · codex/test-model / revi │ │ │ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│   worker_extra_2                   │ │ │                                                                                                               │
+│   任务 3                           │ │ │ ╭─ 任务结果 · #14 · 19:43:24────────────────────────────────────────────────────────────────────────────────╮ │
+│   验收未通过 · codex/test-model /  │ │ │ │  succeeded                                                                                                │ │
+│   worker_extra_3                   │ │ │ │  计算器实现并验证完成                                                                                     │ │
+│ ▶ 任务 4                           │ │ │ │                                                                                                           │ │
+│   等待审批 · codex/test-model / re │ │ │ │  验证证据：                                                                                               │ │
+│   worker_extra_4                   │ │ │ │  12 tests passed; browser smoke checked                                                                   │ │
+│                                    │ │ │ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+│                                    │ │ │                                                                                                               │
+╰────────────────────────────────────╯ │ ╰───────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+审批 approval_demo [worker_a1] · /approval approval_demo 查看                                                                                             
+1–19/19 · 跟随最新 | Enter → Manager · Shift+Enter → 换行                                                                                                 
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令                                                                                                                                 </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/worker-resized-1200.png" alt="Workers 窗口重排 · 1200px"></div></div></details>
+<details><summary>设置 · 320px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Manager                    
+  项目  -[A] /workspace/rebuildv3/AgentS
+        upport *                        
+        -[B] /workspace/mobile-preview  
+  状态  Manager 就绪 · 1 个任务待处理 · 
+        1 个 Worker 正在工作            
+  提示  ↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 
+        滚动 · Ctrl+Tab · /help         
+────────────────────────────────────────
+╭─ 设置 · 保存后重启生效───────────────╮
+│ ▶ Manager 载体       codex           │
+│   Manager 模型       deepseek-flash  │
+│   Manager effort     high            │
+│   Manager 提示词     （空）          │
+│   Worker 载体        codex           │
+│   Worker 模型        deepseek-flash  │
+│   Worker effort      high            │
+│   Worker 提示词      （空）          │
+│   Codex 审批         自动审批        │
+│   最大并发           4               │
+│   静默阈值           10 分钟         │
+│   鼠标拖选           原生            │
+│   快捷键提示         显示            │
+│                                      │
+│ ↑↓ 选择 · ←→ 修改 · Enter 编辑/保存  │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+╰──────────────────────────────────────╯
+审批 approval_demo [worker_a1] · /approv
+设置保存后需重启 Last Order 生效        
+────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令               </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/settings.png" alt="设置 · 320px"></div></div></details>
+<details><summary>帮助 · 320px：原 TUI / 原生 Webview 对照</summary><div class="comparison"><div><h3>原 TUI（同一数据和列数）</h3><pre>Last Order · Manager                    
+  项目  -[A] /workspace/rebuildv3/AgentS
+        upport *                        
+        -[B] /workspace/mobile-preview  
+  状态  Manager 就绪 · 1 个任务待处理 · 
+        1 个 Worker 正在工作            
+  提示  ↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 
+        滚动 · Ctrl+Tab · /help         
+────────────────────────────────────────
+/ 在输入框内显示浅色补全；↑↓ 切候选，Tab
+ 填入，Esc 收起                         
+补全仅填入文本；Enter 发送，Shift+Enter 
+在输入框内换行。                        
+F5: 展开 / 折叠当前对话的全部后台过程   
+/monitor [worker_id]: 在独立窗口监视 wor
+ker                                     
+/settings: 配置 staff provider/model/eff
+ort 等；Ctrl+S 保存，重启生效           
+/reload: 快速重启 Last Order，应用最新配
+置                                      
+/expand 组号 或 /collapse 组号: 展开 /  
+折叠一组                                
+/expand all 或 /collapse all: 展开 / 折 
+叠全部                                  
+Ctrl+Tab: Manager 与 Workers 两个主界面 
+切换                                    
+Workers: 左侧列表 + 右侧详情；窄终端上下
+排列                                    
+Manager ↑↓: 历史输入；Ctrl+↑↓: 逐行滚动 
+对话                                    
+Workers F6: 切换列表 / 详情焦点；↑↓: 选 
+择 worker 或滚动详情                    
+Ctrl+↑↓ / PgUp / PgDn: 逐行或翻页滚动；S
+hift+↑: 顶部；Shift+↓: 底部             
+输入框 ←→: 移动光标；Home / End: 行首 / 
+行尾                                    
+Shift+←→: 选择输入内容；Ctrl+A: 全选；输
+入/Delete 替换选区                      
+/memory status: 查看 Manager native thre
+ad；/memory clear: 清空记忆并开启新的原 
+生会话                                  
+/skills [actor]: 列出 Codex 可见 skills 
+审批 approval_demo [worker_a1] · /approv
+1–33/87 · 历史 · End 回到底部 | Enter → 
+────────────────────────────────────────
+&gt; 输入消息，或 / 查看命令               </pre></div><div><h3>原生 DOM 截图</h3><img src="evidence/commands.png" alt="帮助 · 320px"></div></div></details>
+<script>const frame=document.querySelector('iframe');document.querySelector('#width').onchange=event=>frame.style.width=event.target.value+'px';document.querySelector('#scenario').onchange=event=>{const value=event.target.value;frame.src='native-preview.html?scenario='+(['idle','default'].includes(value)?value:'default')+(['idle','default'].includes(value)?'':'#'+value)};</script></html>

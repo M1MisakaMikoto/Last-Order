@@ -36,6 +36,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 ## Mission Control 任务模型
 
 - manager 通过 `start_worker` 启动一个独立 worker 任务。
+- manager 在本轮调用 `start_worker` 后，用户可见回复必须明确说明已委派，并列出每个已启动 worker 的 ID/标题与任务类型；服务层会校验，模型漏写时自动补充结构化“委派：…”说明。
 - 互不依赖的任务可以并行；依赖任务必须等待前一个成功。
 - `input_worker_id` 使新 worker 从上一个 worker 的提交继续。
 - manager-only notes 通过 `update_worker_notes` 修改，只在完成/失败回调中返回。
@@ -44,6 +45,35 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## TUI
 
+### 2026-11-06：Webview 还原要求（覆盖早期样板）
+
+- Webview 仅替换终端渲染，沿用 `src/ui.js` 的控制器、命令、键盘和内容规则；A 只作为墨黑配色参考。
+- 标题使用 `Last Order · Manager/Workers`，项目、状态、提示按原 `headerLines` 排列和换行；显示完整项目路径，不能只显示目录名 `SA`。多项目沿用最多三行和 Alt+↑↓ 滚动。
+- 不添加 Manager/Workers 标签按钮、项目下拉框、欢迎标题、任务卡片、审批卡片、设置弹窗或发送工具栏。原有宿主的图片附件入口保留。
+- 消息保留角色、序号、时间和原始内容规则；Workers 保留列表与详情，宽屏左右、窄屏上下。审批、问题、队列和共享输入按原 TUI 区域排列。
+- 用户消息使用橙黄色边框，与 Manager/Worker 等 Agent 消息的默认边框明确区分；TUI 与 WebView 保持一致。
+- 设置、帮助、请求详情在原主区域内显示，复用原设置字段、校验和键盘流程。普通输入发给 Manager，只有 `/msg` 发给 Worker。
+- 浏览器截图必须与相同数据和尺寸下的原 TUI 文本逐部分核对；浏览器对照不代表真实 VS Code / Remote 宿主验收。
+- 当前可复核入口：[A / TUI 布局核对](design/style-samples/index.html)，详细差异记录：[0.1.77](integration/webview-ui-0.1.77.md)。
+
+- 2026-11-06 最新约束：Webview 替换只为解决性能问题；内容设计、Manager/Workers 信息架构、共享输入与消息路由、命令和键盘操作沿用 TUI。视觉采用用户选定的 A「墨黑 · 极简对话」，保持干净，不引入欢迎大标题或任务看板。
+- 普通输入在 Manager 和 Workers 两页都发给 Manager；只有 `/msg worker_id 消息` 发送给指定 Worker。两页共享当前草稿与输入历史。
+- 保留 F1–F6、Ctrl+Tab、Ctrl+P/N/U/Q、Shift+Enter、对话滚动和 Worker 选择；命令提示与 TUI 共用 `src/commands.js`，Tab 只补全，Enter 才执行。审批、问题和排队消息位于输入区上方。
+- 消息流增量更新复用已有 DOM 节点，保留原生文本选择、滚动位置与工具折叠状态；没有变更的 Worker 列表和操作按钮不重建。
+- 四类 provider 都接入原生流式事件：Codex `item/agentMessage/delta`、Claude `stream_event`、OpenCode `message.part.updated`、DSH `agent_message_chunk`。流式期间同一消息临时显示并标注“生成中”，不写入事件日志；完整轮次结束只提交一条最终消息。没有原生增量的路径直接整条返回，不生成伪增量；工具调用等真实中间事件仍即时显示。Codex 的 `commentary`/`partial_answer` 与紧随其后的最终回复共用同一个外框：中间回复位于框顶部、可展开收起，并通过内部横线与下方最终回复分隔，形成“日”字形；用户可见最终回复仅取 `final_answer`；同一轮多个 `final_answer` 只提交最后一个；没有 `final_answer` 时才回退显示最后一个 `partial_answer`。
+- VSCode 扩展的全部产品界面使用原生 DOM Webview；不再打包或启动 xterm、Webview terminal host、Worker Monitor 终端。
+- VSCode 扩展发现工作区仓库并在 Webview 顶部提供项目选择器；每个项目使用独立 Mission Control 后端，切换时复用已有连接和持久状态。
+- Manager Webview 覆盖消息、固定 Composer、附件、审批/问题、worker 控制、文件/Git、引用、provider-native turns/fork/revert、设置、checkpoint、skills 与命令面板。
+- Manager Webview 支持 F1 返回 Manager、F2/F3/F4 打开 Worker 对话/文件/Git、F5 折叠或展开后台过程、Ctrl+Q 引用当前选区；Composer 的 Shift+Enter 只插入换行。
+
+- VSCode Manager 使用原生 DOM Webview 承载 Manager/Workers 双视图、可滚动消息流、固定 Composer、附件、审批/问题、worker 控制、文件与 Git 查看；CLI 的独立 TUI 继续可用。
+- `/version` 显示运行中的 Last Order 构建版本、Mission Control 协议版本和 PID、manager/worker provider 配置、平台、Node 与项目路径，不输出控制 token。
+- Enter 发送增加进行中锁和 250ms 同文本去重；首次发送尚未完成时，重复 Enter 不会再次提交同一消息。
+- Manager Webview 使用原生滚动容器，输入框固定在底部；滚动不触发 IPC 或重绘全部消息，已有消息的 Markdown 不重复解析。
+- TUI 轮询允许短暂失败，连续 5 次刷新失败或认证失败才断开；单次网络抖动不会直接关闭 TUI。
+- Mission Control `/health` 与 `control.json` 携带控制协议版本；扩展或 CLI 发现旧后端协议不兼容时，先请求其正常 shutdown，再从当前版本启动后端，避免继续附着到旧代码。
+- Codex 返回 `paginated_threads is not supported yet` 时，Last Order 显示兼容性警告并用新 native thread 继续；Last Order 事件历史、manager 文件记忆、worker、checkpoint 与任务状态保留，但旧 native thread 不再挂载。
+- Linux 未设置 `DISPLAY` 和 `WAYLAND_DISPLAY` 时，不启动 `xclip`/`wl-paste`，直接提示使用终端粘贴快捷键 `Ctrl+Shift+V` 或 `Shift+Insert`。
 - Manager 和 Workers 两个主界面；Workers 同时显示列表和详情。
 - 支持对话、工作区、Git、审批、问题、monitor、settings、checkpoint 和原生会话命令。
 - 对话文本支持 Markdown 渲染：标题、粗体、斜体、行内代码、代码块、列表、引用和链接；链接使用 OSC 8，xterm 点击后交给 VSCode 打开。
@@ -52,7 +82,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 - `Shift+←/→` 选择输入内容，`Ctrl+A` 全选，`Ctrl+C` 优先复制输入选区。
 - 输入、粘贴、Backspace、Delete 可替换当前选区。
 - 长输入按显示宽度软换行，输入区动态占用多行。
-- Enter 始终执行当前输入或提交消息；Ctrl+Enter 在输入框内插入硬换行。Tab 单独负责补全填入，避免无参数命令被 Enter 补全阻塞。
+- Enter 始终执行当前输入或提交消息；Shift+Enter 在输入框内插入硬换行。Tab 单独负责补全填入，避免无参数命令被 Enter 补全阻塞。
 - TUI 启用 bracketed paste；多行粘贴作为一次 input insertion 处理，不经过 Enter/Return keypress，因此不会误发送。VSCode xterm 原生粘贴也覆盖该路径。
 - Manager 忙碌时，新消息进入独立的“排队发送”列表，不混入普通对话；开始处理后自动移出队列并回到正常对话时间线。
 - Manager 主界面只显示用户与 Manager 的对话；worker 工具调用、后台检查、内部通信不会混入消息区。顶部状态行展示 Manager 阶段、活动/排队/等待/完成 worker 数、用户待处理消息和 worker 回调数。
@@ -80,7 +110,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## Multi-Project Workspace
 
-- 打开一个工作区根目录时，Last Order 自动扫描最多三层的 Git 仓库并分配 A、B、C 等项目编号。
+- 打开一个工作区根目录时，Last Order 只检查根目录本身及其直接子目录中的 Git 仓库，不递归扫描更深层级，并分配 A、B、C 等项目编号。
 - 顶部项目列表最多显示三行，可用 Alt+↑/↓ 滚动；当前项目带 `*` 标记。
 - 输入 `-A`/`-B` 或 `-A message` 切换或路由到对应项目，项目前缀支持 Tab 智能补全。
 - 每个项目使用独立的 Mission Control、Manager、Worker 和配置；项目服务按需启动，切换后仍可并行运行。
@@ -146,6 +176,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## Worker Archiving
 
+- `/w` 直接打开 Workers 界面；`/msg worker_id 消息` 向指定 worker 发送消息，并通知 manager。
 - Worker 列表默认隐藏已归档 worker；`/workers all` 一次性显示全部 worker，返回 Manager 后恢复默认隐藏。
 - `/archive [worker_id]` 允许用户手动归档已停止 worker；归档后禁止 message、resume、retry，并保留历史、结果、commit 和证据。
 - Manager 仍可通过 `inspect` 和 `inspect_worker_history` 读取已归档 Worker 的事件历史与证据；归档仅禁止继续执行。
@@ -180,12 +211,9 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 - Last Order 左侧 `Last Order` 容器包含 `Workers` 与 `Git Diff` 两棵树视图；Git Diff 由 vendored MIT `git-diff-viewer` 提供，不再需要独立扩展。
 - Git Diff 支持仓库选择、HEAD/index/ref 对比、完整文件树、原生 VS Code diff、相对路径复制、上下文导出和可选 Codex MCP 集成。
-- Worker Monitor 终端使用 `shellPath + shellArgs` 直接启动 Node，不把带空格的路径拼成 shell 命令，兼容 PowerShell、cmd、bash 和 zsh。
-- Manager 入口（Workers 树中的 Manager、状态栏、视图标题按钮）统一 focus 唯一的 `missionControl.manager` 辅助侧栏 Webview；只有 Worker 项打开独立 monitor 终端。
 
 - VSCode 是单一产品入口，统一管理 Mission Control 生命周期。
 - 左侧 Activity Bar 提供 worker 树。
-- 右侧辅助侧栏使用 xterm WebviewView 承载现有 TUI。
 - Worker monitor 使用编辑器区终端页签。
 - 扩展包含内置 backend，可作为 VSIX 安装。
 - 支持编辑器上下文、原生 diff、worker notes、接管/交还、checkpoint 和 monitor。
@@ -199,7 +227,7 @@ manager 可把仓库探索和概念调研委派给 explore worker，避免长时
 
 ## 验证
 
-- 当前自动化测试：138 项。
+- 当前自动化测试：146 项。
 - 覆盖 adapter 映射、原生审批、任务回调、并发、恢复、Git worktree、checkpoint、输入编辑、VSCode control API 和 VSIX backend。
 - Codex 已完成真实 manager、实现 worker、独立验收 worker、审批、恢复和交付闭环。
 

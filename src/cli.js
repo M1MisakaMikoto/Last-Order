@@ -9,6 +9,7 @@ import { openWorkerMonitor } from './core/monitor.js';
 import { attachOrStartMissionControl, ServiceClient } from './core/control-client.js';
 import { discoverGitRepositories } from './core/projects.js';
 import { MultiProjectService } from './core/multi-project-service.js';
+import { APP_VERSION } from './core/version.js';
 import { TerminalUI } from './ui.js';
 
 const help = `Last Order (lo) - coding-agent workspace
@@ -19,7 +20,7 @@ node bin/last-order.js doctor
 All sessions use the selected real CLI and its existing login/model configuration.
 Providers: claude, codex, dsh (DeepSeek Harness), opencode
 Options: --manager-model MODEL  --manager-effort LEVEL  --worker-model MODEL  --worker-effort LEVEL  --codex-approvals auto_review|user (default auto_review)  --message TEXT  --max-workers 4  --silence-minutes 10  --help
-Commands inside TUI: /help, /settings, /reload, /monitor, /shutdown, /interrupt, /w, /pause, /resume, /cancel, /retry, /approve, /deny, /answer, /open, /diff, /quit
+Commands inside TUI: /help, /version, /settings, /reload, /monitor, /shutdown, /interrupt, /w, /msg, /pause, /resume, /cancel, /retry, /approve, /deny, /answer, /open, /diff, /quit
 Use -A, -B, ... at the start of a message to target a discovered project.
 Node.js 24+, an interactive terminal, and Git are required.`;
 
@@ -49,7 +50,7 @@ export async function main() {
     }
   });
   if (values.help) { console.log(help); return; }
-  if (values.version) { console.log('0.1.0'); return; }
+  if (values.version) { console.log(APP_VERSION); return; }
   if (positionals[0] === 'doctor') {
     for (const provider of PROVIDERS) {
       const command = providerCommand(provider);

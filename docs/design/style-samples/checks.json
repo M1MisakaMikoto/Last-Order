@@ -1,0 +1,34 @@
+[
+  {
+    "style": "a",
+    "sidebarOverflow": false,
+    "tabs": true,
+    "pause": true,
+    "approve": true,
+    "send": true
+  },
+  {
+    "style": "b",
+    "sidebarOverflow": false,
+    "tabs": true,
+    "pause": true,
+    "approve": true,
+    "send": true
+  },
+  {
+    "style": "c",
+    "sidebarOverflow": false,
+    "tabs": true,
+    "pause": true,
+    "approve": true,
+    "send": true
+  },
+  {
+    "style": "d",
+    "sidebarOverflow": false,
+    "tabs": true,
+    "pause": true,
+    "approve": true,
+    "send": true
+  }
+]

@@ -8,11 +8,49 @@ test('terminal output neutralizes escape sequences and handles Chinese cell widt
   assert.deepEqual(wrap('中文AB', 4), ['中文', 'AB']);
 });
 
-test('normal send and interrupt are distinct commands; worker control is explicit', async () => {
+test('wrapped labeled header retains worker counts and every shortcut instead of clipping continuation text', () => {
+  const state = { workers: {}, manager: { active: [], pending: [] } };
+  const ui = new TerminalUI({ state, config: {}, git: { root: '/project' } });
+  for (const columns of [40, 45, 60]) {
+    const header = ui.headerLines(state, columns, 40).map(line => line.trim()).join('').replace(/\s/g, '');
+    assert.ok(header.includes('Manager就绪·0个任务待处理·0个Worker正在工作'), String(columns));
+    assert.ok(header.includes('Ctrl+↑↓滚动'), String(columns));
+    assert.ok(header.includes('Ctrl+Tab'), String(columns));
+  }
+});
+
+test('normal send and interrupt are distinct commands; worker messages name their target', async () => {
   const actions = []; const service = { state: { workers: { w: { id: 'w', workspace: '/test' } } }, sendManagerMessage: async (...args) => actions.push(['manager', ...args]), sendWorkerMessage: async (...args) => actions.push(['worker', ...args]), controlWorker: async (...args) => actions.push(['control', ...args]) };
   const ui = new TerminalUI(service);
-  await ui.command('普通消息'); await ui.command('/interrupt 紧急消息'); await ui.command('/w 请先检查工作流'); await ui.command('/pause');
-  assert.deepEqual(actions, [['manager', '普通消息', false, [], []], ['manager', '紧急消息', true], ['worker', 'w', '请先检查工作流'], ['control', 'w', 'pause', '']]);
+  await ui.command('hello'); await ui.command('/interrupt urgent'); await ui.command('/msg w inspect the workflow'); await ui.command('/w'); await ui.command('/pause');
+  assert.deepEqual(actions, [['manager', 'hello', false, [], []], ['manager', 'urgent', true], ['worker', 'w', 'inspect the workflow'], ['control', 'w', 'pause', '']]);
+  assert.equal(ui.screen, 'workers');
+  await assert.rejects(ui.command('/msg missing hello'), /Unknown worker/);
+  await assert.rejects(ui.command('/msg w'), /Usage: \/msg worker_id message/);
+});
+
+test('rapid Enter presses submit at most once while a send is in flight', async () => {
+  let release;
+  const calls = [];
+  const service = {
+    state: { workers: {}, pipelines: {}, requests: {}, notifications: [], manager: { pending: [] }, approvals: [], questions: [] },
+    config: {},
+    sendManagerMessage: async text => {
+      calls.push(text);
+      await new Promise(resolve => { release = resolve; });
+    }
+  };
+  const ui = new TerminalUI(service);
+  ui.render = () => {};
+  ui.input = 'hello';
+  const first = ui.submitInput();
+  await Promise.resolve();
+  ui.input = 'hello';
+  const second = ui.submitInput();
+  await Promise.resolve();
+  assert.deepEqual(calls, ['hello']);
+  release();
+  await Promise.all([first, second]);
 });
 
 test('/interrupt without text stops the manager without sending or retrying a message', async () => {
@@ -52,6 +90,29 @@ test('/skills lists Codex skills with names, descriptions and paths', async () =
   assert.match(ui.preview, /\$pdf/);
   assert.match(ui.preview, /Read and extract PDF content/);
   assert.match(ui.preview, /\.agents\/skills\/pdf\/SKILL\.md/);
+});
+
+test('/version reports the runtime backend, protocol and staff configuration', async () => {
+  const { ui } = navigationUI();
+  ui.service.client = {
+    info: {
+      version: '0.1.56', protocol: 2, pid: 1234,
+      started_at: '2026-11-06T10:00:00.000Z', project_root: '/workspace/project'
+    }
+  };
+  ui.settings = {
+    ...ui.settings,
+    manager: 'codex', managerModel: 'manager-model', managerEffort: 'high',
+    worker: 'claude', workerModel: 'worker-model', workerEffort: 'medium'
+  };
+  await ui.command('/version');
+  assert.equal(ui.panel, 'help');
+  assert.match(ui.preview, /Last Order: 0\.1\.56/);
+  assert.match(ui.preview, /Mission Control: protocol 2 · PID 1234/);
+  assert.match(ui.preview, /Manager: codex \/ manager-model \/ high/);
+  assert.match(ui.preview, /Worker: claude \/ worker-model \/ medium/);
+  assert.match(ui.preview, /Project: \/workspace\/project/);
+  assert.match(ui.preview, new RegExp(`Node ${process.version.replaceAll('.', '\\.')}`));
 });
 
 test('dollar-prefixed skills load asynchronously and complete through Tab', async () => {
@@ -382,12 +443,12 @@ test('long input wraps into multiple visual lines and keeps the cursor visible',
   for (const line of presentation.lines) assert.ok(line.plain.length <= 20);
 });
 
-test('Ctrl+Enter inserts a hard newline while Enter submits the message', async () => {
+test('Shift+Enter inserts a hard newline while Enter submits the message', async () => {
   const { ui } = navigationUI();
   const sent = [];
   ui.service.sendManagerMessage = async text => sent.push(text);
   ui.input = '第一行';
-  await ui.key('', { name: 'return', ctrl: true });
+  await ui.key('', { name: 'return', shift: true });
   assert.equal(ui.input, '第一行\n');
   await ui.key('第二行', {});
   assert.equal(ui.input, '第一行\n第二行');
@@ -680,6 +741,14 @@ test('Manager Ctrl+arrows scroll, Shift+arrows jump to top/bottom, and drafts re
   assert.ok(ui.frame(90, 24).some(line => line.includes('继续跟随的新消息')));
 });
 
+test('footer advertises the newline shortcut instead of the /w navigation hint', () => {
+  const { ui } = navigationUI();
+  const footer = ui.frame(100, 30).find(line => line.includes('Enter → Manager'));
+  assert.ok(footer);
+  assert.match(footer, /Shift\+Enter → 换行/);
+  assert.doesNotMatch(footer, /\/w → Worker/);
+});
+
 test('conversation can overscroll past the last message to leave readable bottom padding', () => {
   const { ui, service } = navigationUI();
   service.store.history = () => Array.from({ length: 60 }, (_, i) => ({
@@ -696,6 +765,36 @@ test('conversation can overscroll past the last message to leave readable bottom
   ui.scrollTo('bottom');
   ui.frame(90, 24);
   assert.equal(ui.scrollState.top, null);
+});
+
+test('input stays pinned to the final terminal row while conversation scrolls through padding', () => {
+  const { ui } = navigationUI(4);
+  ui.service.store.history = () => Array.from({ length: 60 }, (_, seq) => ({
+    seq: seq + 1, type: 'message', data: { role: 'assistant', text: `message ${seq}` }
+  }));
+  ui.frame(80, 24);
+  ui.scrollBy(1000);
+  const frame = ui.frame(80, 24);
+  assert.equal(frame.length, 24);
+  assert.equal(frame.at(-1), ui.lastInputPresentation.plain);
+  assert.match(ui.scrollHint(), /底部留白/);
+});
+
+test('wheel scrolling coalesces renders and reuses unchanged conversation layout', () => {
+  const { ui } = navigationUI(2);
+  const history = [{ seq: 1, type: 'message', data: { role: 'assistant', text: 'first message' } }];
+  ui.service.store.history = () => history;
+  const scheduled = [];
+  ui.scheduleRender = delay => scheduled.push(delay);
+  ui.frame(80, 24);
+  ui.scrollWheel(-3);
+  assert.deepEqual(scheduled, [16]);
+  const first = ui.conversation('w0', 80);
+  const second = ui.conversation('w0', 80);
+  assert.equal(first, second);
+  history.push({ seq: 2, type: 'message', data: { role: 'assistant', text: 'second message' } });
+  const next = ui.conversation('w0', 80);
+  assert.notEqual(next, first);
 });
 
 test('Manager arrows navigate submitted input history and restore the unsent draft', async () => {
@@ -852,13 +951,15 @@ test('messages have separate role borders and indented multiline bodies, includi
     { seq: 4, type: 'reported_result', data: { status: 'succeeded', summary: '任务完成', evidence: '18 项通过' } }
   ];
   const lines = ui.conversation('w1', 60), text = lines.join('\n');
-  assert.equal(lines.filter(line => line.startsWith('╭')).length, 4);
+  assert.equal(lines.filter(line => clean(line).startsWith('╭')).length, 4);
+  assert.ok(lines.some(line => line.startsWith('\x1b[38;5;214m╭─ 用户 · #1')));
+  assert.ok(lines.some(line => line.startsWith('╭─ Worker · #2')));
   assert.match(text, /╭─ 用户 · #1/); assert.match(text, /╭─ Worker · #2/); assert.match(text, /后台过程 #1/);
   assert.ok(lines.some(line => line.startsWith('│') && line.includes('const value = 1;')));
   assert.ok(lines.some(line => line.startsWith('│  下一段')));
   assert.match(text, /验证证据：/); assert.match(text, /18 项通过/);
   assert.doesNotMatch(text, /inspect worker|\t/);
-  assert.ok(lines.filter(Boolean).every(line => line === fit(line, 60)), 'borders remain aligned with Chinese text');
+  assert.ok(lines.filter(Boolean).every(line => clean(line) === fit(clean(line), 60)), 'borders remain aligned with Chinese text');
 });
 
 test('Manager frame preserves clickable file and copy-code OSC 8 links', () => {
@@ -873,7 +974,7 @@ test('Manager frame preserves clickable file and copy-code OSC 8 links', () => {
   assert.match(frame, /\[copy code\]/);
 });
 
-test('Manager view shows only user-manager conversation while status rows summarize workers and callbacks', () => {
+test('Manager view folds intermediate assistant messages while status rows summarize workers and callbacks', async () => {
   const { ui, service, state } = navigationUI();
   state.managerBusy = true;
   state.manager.active = ['m1'];
@@ -889,7 +990,16 @@ test('Manager view shows only user-manager conversation while status rows summar
   const conversation = ui.conversation('manager', 80).join('\n');
   assert.match(conversation, /用户问题/);
   assert.match(conversation, /给用户的答复/);
+  assert.match(conversation, /中间回复 #1/);
+  assert.equal(conversation.split('\n').filter(line => clean(line).startsWith('╭')).length, 2);
+  assert.match(conversation, /├─+┤/);
+  assert.ok(conversation.indexOf('中间回复 #1') < conversation.indexOf('├'));
+  assert.ok(conversation.indexOf('├') < conversation.indexOf('Manager · #4'));
   assert.doesNotMatch(conversation, /内部工具细节|后台思考|worker 内部结果/);
+  await ui.command('/expand 1');
+  const expanded = ui.conversation('manager', 80).join('\n');
+  assert.match(expanded, /后台思考/);
+  assert.equal(expanded.split('\n').filter(line => clean(line).startsWith('╭')).length, 2);
   const frame = ui.frame(100, 30).join('\n');
   assert.match(frame, /正在与用户对话/);
   assert.match(frame, /1 个任务待处理/);
@@ -941,6 +1051,8 @@ test('command suggestions render as inline input previews without a separate men
   ui.input = '/ca';
   const preview = ui.inputPresentation(80);
   assert.equal(preview.ghost, 'ncel');
+  assert.equal(preview.lines.at(-1).ghost, 'ncel');
+  assert.match(preview.lines.at(-1).note, /Tab 填入/);
   assert.match(preview.plain, /^> \/cancel /);
 
   const frame = ui.frame(80, 24);
@@ -955,6 +1067,25 @@ test('command suggestions render as inline input previews without a separate men
   assert.equal(ui.input, '/');
   assert.equal(ui.inputPresentation(80).ghost, '');
   assert.ok(!ui.frame(80, 24).at(-1).includes('Tab 填入'));
+});
+
+test('streaming assistant output updates one in-progress message in place', () => {
+  const event = {
+    seq: null, time: '2026-11-06T10:00:00.000Z', actor: 'manager', type: 'message',
+    data: { role: 'assistant', text: 'stream-start', streaming: true, memoryEpoch: 0 }
+  };
+  const service = {
+    state: { workers: {}, manager: { active: [], pending: [], memoryEpoch: 0 } },
+    config: {}, git: { root: '/project' }, store: { history: () => [event] }
+  };
+  const ui = new TerminalUI(service);
+  let lines = ui.conversation('manager', 80).join('\n');
+  assert.match(lines, /生成中/);
+  assert.match(lines, /stream-start/);
+  event.data.text = 'stream-complete';
+  lines = ui.conversation('manager', 80).join('\n');
+  assert.match(lines, /stream-complete/);
+  assert.doesNotMatch(lines, /stream-start/);
 });
 
 test('approval IDs update from live state and completing one requires a separate Enter to approve', async () => {

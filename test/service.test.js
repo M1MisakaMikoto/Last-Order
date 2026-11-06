@@ -44,6 +44,25 @@ async function fixture(t, behavior, options = {}) {
 }
 const stage = kind => ({ kind, prompt: 'Do ' + kind });
 
+test('streaming assistant updates are transient and the completed message is committed once', async t => {
+  let duringStream, duringStored;
+  const { service } = await fixture(t, async () => {}, { manager: async context => {
+    await context.emit({ type: 'message', id: 'stream-1', text: 'Hel', role: 'assistant', streaming: true });
+    duringStream = service.history('manager');
+    duringStored = service.store.history('manager').filter(event => event.data.role === 'assistant');
+    await context.emit({ type: 'message', id: 'stream-1', text: 'Hello', role: 'assistant', streaming: true });
+    await context.emit({ type: 'message', id: 'stream-1', text: 'Hello', role: 'assistant', streaming: false });
+  } });
+  await service.sendManagerMessage('hello');
+  await waitFor(service, () => !service.managerBusy && service.state.manager.pending.length === 0);
+  assert.equal(duringStream.at(-1).data.text, 'Hel');
+  assert.equal(duringStream.at(-1).data.streaming, true);
+  assert.equal(duringStored.length, 0);
+  const messages = service.store.history('manager').filter(event => event.data.role === 'assistant');
+  assert.deepEqual(messages.map(event => event.data.text), ['Hello']);
+  assert.equal(service.history('manager').at(-1).data.streaming, undefined);
+});
+
 test('background progress replies are tagged for folding while user replies, questions and final delivery remain visible', async t => {
   const { service } = await fixture(t, async () => {}, { manager: async (context, prompt) => {
     const input = JSON.parse(prompt), type = input.user_messages.length ? 'user-reply' : input.notifications[0].type;
@@ -387,12 +406,46 @@ test('manager auto-delegates concrete archive analysis but answers pure concepts
   assert.equal(delegated.delegation_policy.requires_explore, true);
   assert.match(delegated.delegation_policy.instruction, /Report activity factually/);
   assert.match(delegated.delegation_policy.instruction, /Never say you are inspecting/);
+  assert.match(delegated.delegation_policy.instruction, /explicitly say that work was delegated/);
   assert.equal(delegated.parallelism_policy.max_workers, 4);
   assert.match(delegated.parallelism_policy.instruction, /started in parallel/);
-  assert.equal(delegated.delegation_policy.policy_version, '2026-11-04.3');
-  assert.equal(delegated.prompt_config.managerPolicyVersion, '2026-11-04.3');
+  assert.equal(delegated.delegation_policy.policy_version, '2026-11-06.1');
+  assert.equal(delegated.prompt_config.managerPolicyVersion, '2026-11-06.1');
   assert.equal(delegated.delegation_policy.auto_started.worker_kind, 'explore');
   assert.ok(['running', 'succeeded'].includes(worker.status));
+});
+
+test('manager replies explicitly disclose every worker started during the turn', async t => {
+  const { service } = await fixture(t, async context => {
+    await context.callTool('report_result', { status: 'succeeded', summary: 'Implemented login' });
+  }, {
+    manager: async (context, prompt) => {
+      const input = JSON.parse(prompt);
+      if (input.user_messages.length) {
+        await context.callTool('start_worker', {
+          title: 'Login page', prompt: 'Implement the login page', requirement: 'Implement the login page', kind: 'implement'
+        });
+        await context.emit({ type: 'message', text: '已安排处理。' });
+      } else {
+        await context.emit({ type: 'message', text: 'Worker finished.' });
+      }
+    }
+  });
+  await service.sendManagerMessage('请实现登录页');
+  await waitFor(service, () => service.store.history('manager').some(event =>
+    event.data.role === 'assistant' && /已安排处理。[\s\S]*委派：已启动 1 个 Worker/.test(event.data.text)
+  ));
+  const worker = Object.values(service.state.workers).find(item => item.title === 'Login page');
+  const disclosure = service.store.history('manager').find(event =>
+    event.data.role === 'assistant' && /已安排处理。[\s\S]*委派：已启动 1 个 Worker/.test(event.data.text)
+  );
+  assert.ok(worker);
+  assert.match(disclosure.data.text, new RegExp(worker.id));
+  assert.match(disclosure.data.text, /Login page/);
+  assert.match(disclosure.data.text, /implement/);
+  assert.equal(service.store.history('manager').filter(event =>
+    event.data.role === 'assistant' && event.data.text.includes('已安排处理。')
+  ).length, 1);
 });
 
 test('Mission Control passes manager and worker staff model settings into runtime contexts', async t => {

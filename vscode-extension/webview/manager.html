@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="__CSP__">
+  <link rel="stylesheet" href="__STYLE__">
+  <title>Last Order</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header" aria-label="项目与运行状态"><pre id="tui-header"></pre></header>
+    <main id="workspace" class="workspace">
+      <section id="manager-pane" class="pane active" aria-label="Manager 对话">
+        <div id="manager-messages" class="message-scroll" tabindex="0" aria-label="Manager 历史"></div>
+      </section>
+      <section id="workers-pane" class="pane" aria-label="Workers">
+        <div class="workers-layout">
+          <aside id="worker-list-panel" class="worker-list-panel">
+            <div id="worker-list-title" class="section-title"></div>
+            <div id="worker-list" class="worker-list" tabindex="0" role="listbox" aria-label="Worker 列表"></div>
+          </aside>
+          <section class="worker-detail">
+            <div id="worker-detail-heading" class="worker-detail-heading"></div>
+            <div id="worker-messages" class="message-scroll" tabindex="0" aria-label="Worker 历史"></div>
+            <pre id="worker-preview" class="content-preview hidden" tabindex="0" aria-label="Worker 工作区或 Git"></pre>
+          </section>
+        </div>
+      </section>
+      <section id="auxiliary-pane" class="pane" aria-label="帮助、设置或请求">
+        <pre id="auxiliary-preview" class="content-preview" tabindex="0"></pre>
+        <div id="settings-view" class="settings-view hidden" tabindex="0" aria-label="设置"></div>
+      </section>
+    </main>
+    <footer class="composer-shell">
+      <div id="pending-requests" class="pending-requests" aria-label="待审批与待答问题"></div>
+      <div id="pending-queue" class="pending-queue hidden" aria-label="排队发送"></div>
+      <div id="notice" class="notice" role="status"></div>
+      <div class="input-row">
+        <label for="composer-input" class="input-prefix" aria-label="输入消息">&gt; </label>
+        <div class="input-editor">
+          <pre id="input-ghost" class="input-ghost" aria-hidden="true"></pre>
+          <textarea id="composer-input" rows="1" spellcheck="false" aria-label="消息与命令" aria-describedby="notice" placeholder="输入消息、粘贴图片，或 / 查看命令"></textarea>
+        </div>
+      </div>
+    </footer>
+  </div>
+  <div id="attachment-dock" class="attachment-dock">
+    <div id="attachment-tray" class="attachment-tray"></div>
+  </div>
+  <span id="cell-measure" aria-hidden="true">MMMMMMMMMM</span>
+  <script nonce="__NONCE__">__UI_RUNTIME__</script>
+  <script nonce="__NONCE__" src="__SCRIPT__"></script>
+</body>
+</html>

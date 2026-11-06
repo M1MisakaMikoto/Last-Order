@@ -17,26 +17,28 @@ async function isDirectory(directory) {
   try { return (await stat(directory)).isDirectory(); } catch { return false; }
 }
 
-export async function discoverGitRepositories(root, { maxDepth = 3, limit = 100 } = {}) {
+async function isGitRepository(directory) {
+  return isDirectory(path.join(directory, '.git'));
+}
+
+export async function discoverGitRepositories(root, { limit = 100 } = {}) {
   const workspace = path.resolve(root);
   if (!(await isDirectory(workspace))) throw new Error(`Workspace is not a directory: ${workspace}`);
-  const repositories = [];
-  async function visit(directory, depth) {
-    if (repositories.length >= limit) return;
-    if (await isDirectory(path.join(directory, '.git'))) {
-      repositories.push({ root: directory, name: path.basename(directory) });
-      return;
-    }
-    if (depth >= maxDepth) return;
+  const candidates = [];
+  if (await isGitRepository(workspace)) {
+    candidates.push(workspace);
+  } else {
     let entries;
-    try { entries = await readdir(directory, { withFileTypes: true }); } catch { return; }
+    try { entries = await readdir(workspace, { withFileTypes: true }); } catch { entries = []; }
     for (const entry of entries) {
       if (!entry.isDirectory() || SKIP.has(entry.name)) continue;
-      await visit(path.join(directory, entry.name), depth + 1);
+      const directory = path.join(workspace, entry.name);
+      if (await isGitRepository(directory)) candidates.push(directory);
     }
   }
-  await visit(workspace, 0);
-  return repositories
+  return candidates
+    .slice(0, limit)
+    .map(directory => ({ root: directory, name: path.basename(directory) }))
     .sort((a, b) => a.root.localeCompare(b.root))
     .map((repository, index) => ({ ...repository, code: projectCode(index) }));
 }

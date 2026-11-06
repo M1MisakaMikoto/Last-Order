@@ -1,0 +1,2988 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <style>:root {
+  color-scheme: dark;
+  --bg: #1c1c1e; --fg: #e7e7e8; --muted: #99999f; --line: #ffffff20; --surface: #242426;
+  --focus: var(--vscode-focusBorder, #b5b5bd);
+  --link: var(--vscode-textLink-foreground, #b6bfd5);
+  --user-border: var(--vscode-editorWarning-foreground, #e6a23c);
+  --suggestion: var(--vscode-editorSuggestWidget-foreground, var(--link));
+  --suggestion-bg: color-mix(in srgb, var(--suggestion) 16%, transparent);
+  --suggestion-rule: color-mix(in srgb, var(--suggestion) 72%, transparent);
+  --mono: var(--vscode-editor-font-family, "Cascadia Code", Consolas, "Microsoft YaHei", monospace);
+}
+body.vscode-light, body.vscode-high-contrast-light {
+  color-scheme: light;
+  --bg: #fafafa; --fg: #303034; --muted: #68686f; --line: #00000025; --surface: #efeff1;
+  --user-border: var(--vscode-editorWarning-foreground, #b86e00);
+}
+body.vscode-high-contrast, body.vscode-high-contrast-light {
+  --bg: var(--vscode-editor-background, #000); --fg: var(--vscode-editor-foreground, #fff);
+  --muted: var(--fg); --line: var(--vscode-contrastBorder, var(--fg)); --surface: var(--bg);
+  --user-border: var(--vscode-editorWarning-foreground, #f0b44c);
+}
+* { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+html, body { height: 100%; margin: 0; overflow: hidden; }
+body { color: var(--fg); background: var(--bg); font: var(--vscode-font-size, 13px)/1.5 var(--mono); }
+pre, textarea { font: inherit; tab-size: 4; }
+pre { margin: 0; }
+.hidden { display: none !important; }
+.app-shell { height: 100%; padding: 8px 10px 6px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.app-header { border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+#tui-header { white-space: pre; overflow: hidden; }
+.workspace, .pane { min-height: 0; overflow: hidden; }
+.pane { display: none; height: 100%; }
+.pane.active { display: block; }
+.message-scroll { height: 100%; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 6px 0; overscroll-behavior: contain; outline-offset: -1px; }
+.message-scroll::after, .content-preview::after { content: ''; display: block; height: var(--tail-padding, 0px); }
+.message { position: relative; border: 1px solid var(--line); border-radius: 4px; margin-bottom: 10px; content-visibility: auto; contain-intrinsic-size: 90px; }
+.message-label { position: sticky; top: 0; z-index: 1; margin: -1px 8px 0; padding: 0 5px; background: var(--bg); width: fit-content; max-width: calc(100% - 16px); color: var(--muted); overflow-wrap: anywhere; }
+.message-body { padding: 5px 12px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message.user, .message.assistant { width: 100%; }
+.message.user { border-color: var(--user-border); }
+.message.error { border-color: var(--vscode-errorForeground, #bd8f8f); }
+.message-intermediate { border-bottom: 1px solid var(--line); }
+.message-intermediate > summary { color: var(--muted); cursor: pointer; padding: 4px 12px 2px; list-style: none; overflow-wrap: anywhere; }
+.message-intermediate > summary::-webkit-details-marker { display: none; }
+.message-intermediate > .background-content { padding: 2px 12px 8px; }
+.message-intermediate > .background-collapsed { padding: 0 12px 7px; }
+.message-intermediate[open] > .background-collapsed { display: none; }
+.message-intermediate:not([open]) > .background-content { display: none; }
+.combined-message > .message-final-label { position: static; margin: 7px 12px 0; padding: 0; width: auto; background: transparent; }
+.message-final-body { padding-top: 7px; }
+.background-group { border: 1px solid var(--line); border-radius: 4px; margin-bottom: 10px; }
+.background-group > summary { position: sticky; top: 0; z-index: 1; background: var(--bg); color: var(--muted); cursor: pointer; padding: 4px 10px; list-style: none; overflow-wrap: anywhere; }
+.background-group > summary::-webkit-details-marker { display: none; }
+.background-content { padding: 4px 12px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.background-entry { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 10px; }
+.background-label { color: var(--muted); }
+.background-collapsed { color: var(--muted); padding: 0 12px 7px; }
+.background-group[open] > .background-collapsed { display: none; }
+.background-group:not([open]) > .background-content { display: none; }
+.dim { color: var(--muted); }
+.bold { font-weight: 700; }
+.italic { font-style: italic; }
+.underline { text-decoration: underline; text-underline-offset: 2px; }
+.code { color: var(--link); }
+a { color: var(--link); text-decoration: underline; text-underline-offset: 2px; }
+.workers-layout { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(180px, 36%) minmax(0, 1fr); gap: 10px; padding-top: 6px; }
+.workers-layout.compact { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(50px, 18%) minmax(0, 1fr); gap: 6px; }
+.workers-layout.compact .worker-meta, .workers-layout.compact .worker-id { display: none; }
+.worker-list-panel, .worker-detail { min-height: 0; min-width: 0; display: grid; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.worker-list-panel { grid-template-rows: auto minmax(0, 1fr); }
+.section-title, .worker-detail-heading { padding: 4px 8px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; white-space: pre-wrap; }
+.worker-list { overflow-y: auto; padding: 4px 6px; outline-offset: -1px; }
+.worker-row { padding: 3px 5px; scroll-margin-block: 4px; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
+.worker-row[aria-selected="true"] { background: var(--surface); }
+.worker-row .worker-meta, .worker-row .worker-id { color: var(--muted); }
+.worker-detail { grid-template-rows: auto minmax(0, 1fr); }
+.worker-detail .message-scroll { padding: 6px; }
+.content-preview { height: 100%; min-height: 0; overflow: auto; padding: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.composer-shell { min-height: 0; max-height: 50vh; display: flex; flex-direction: column; overflow: hidden; }
+.pending-requests { max-height: 15vh; overflow-y: auto; }
+.pending-request { white-space: pre; overflow: hidden; }
+.pending-queue { white-space: pre; overflow: hidden; flex-shrink: 0; }
+.queue-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.notice { color: var(--muted); white-space: pre; overflow: hidden; min-height: 1.5em; margin-top: 3px; }
+.input-row { display: flex; align-items: flex-start; border-top: 1px solid var(--line); padding-top: 4px; }
+.input-prefix { white-space: pre; }
+.input-editor { flex: 1; min-width: 0; position: relative; overflow: hidden; }
+#composer-input, .input-ghost { grid-area: 1 / 1; margin: 0; padding: 0; border: 0; border-radius: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: inherit; }
+#composer-input { display: block; width: 100%; min-height: 1.5em; max-height: 30vh; resize: none; outline: none; color: var(--fg); background: transparent; overflow-y: auto; }
+#composer-input::placeholder { color: var(--muted); opacity: 1; }
+.input-ghost { position: absolute; inset: 0; pointer-events: none; color: transparent; white-space: pre; overflow: hidden; }
+.input-ghost .ghost {
+  color: var(--suggestion);
+  background: var(--suggestion-bg);
+  border-radius: 2px;
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-color: var(--suggestion-rule);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.input-ghost .completion-note { color: var(--muted); opacity: .9; }
+.settings-view { height: 100%; overflow: auto; padding: 6px 0; outline-offset: -1px; }
+.settings-title { border-bottom: 1px solid var(--line); padding: 4px 8px; }
+.settings-field { display: grid; grid-template-columns: 2ch minmax(14ch, 20ch) minmax(0, 1fr); padding: 3px 8px; cursor: default; }
+.settings-field.selected { background: var(--surface); }
+.settings-value { white-space: pre-wrap; overflow-wrap: anywhere; }
+#settings-editor { width: 100%; min-height: 3em; max-height: 25vh; resize: vertical; border: 1px solid var(--line); color: var(--fg); background: var(--surface); font: inherit; }
+.settings-hint { padding: 8px; color: var(--muted); }
+#cell-measure { position: fixed; visibility: hidden; white-space: pre; pointer-events: none; }
+.attachment-dock { position: fixed; right: 14px; bottom: 66px; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; max-width: min(520px, 80vw); pointer-events: none; }
+.attachment-tray { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; pointer-events: auto; }
+.attachment { position: relative; width: 92px; padding: 4px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; }
+.attachment img { display: block; width: 82px; height: 64px; object-fit: contain; }
+.attachment span { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--muted); }
+.attachment button { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; padding: 0; border-radius: 50%; }
+.attachment-dock button { pointer-events: auto; color: var(--fg); background: var(--surface); border: 1px solid var(--line); cursor: pointer; }
+:focus-visible { outline: 1px solid var(--focus); }
+@media (max-width: 680px) {
+  .app-shell { padding: 5px 6px; }
+  .workers-layout.compact .worker-row { padding-block: 1px; }
+  .settings-field { grid-template-columns: 2ch minmax(0, 1fr); }
+  .settings-value { grid-column: 2; }
+  .message-body { padding-inline: 8px; }
+}
+</style>
+  <title>Last Order</title>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header" aria-label="项目与运行状态"><pre id="tui-header"></pre></header>
+    <main id="workspace" class="workspace">
+      <section id="manager-pane" class="pane active" aria-label="Manager 对话">
+        <div id="manager-messages" class="message-scroll" tabindex="0" aria-label="Manager 历史"></div>
+      </section>
+      <section id="workers-pane" class="pane" aria-label="Workers">
+        <div class="workers-layout">
+          <aside id="worker-list-panel" class="worker-list-panel">
+            <div id="worker-list-title" class="section-title"></div>
+            <div id="worker-list" class="worker-list" tabindex="0" role="listbox" aria-label="Worker 列表"></div>
+          </aside>
+          <section class="worker-detail">
+            <div id="worker-detail-heading" class="worker-detail-heading"></div>
+            <div id="worker-messages" class="message-scroll" tabindex="0" aria-label="Worker 历史"></div>
+            <pre id="worker-preview" class="content-preview hidden" tabindex="0" aria-label="Worker 工作区或 Git"></pre>
+          </section>
+        </div>
+      </section>
+      <section id="auxiliary-pane" class="pane" aria-label="帮助、设置或请求">
+        <pre id="auxiliary-preview" class="content-preview" tabindex="0"></pre>
+        <div id="settings-view" class="settings-view hidden" tabindex="0" aria-label="设置"></div>
+      </section>
+    </main>
+    <footer class="composer-shell">
+      <div id="pending-requests" class="pending-requests" aria-label="待审批与待答问题"></div>
+      <div id="pending-queue" class="pending-queue hidden" aria-label="排队发送"></div>
+      <div id="notice" class="notice" role="status"></div>
+      <div class="input-row">
+        <label for="composer-input" class="input-prefix" aria-label="输入消息">&gt; </label>
+        <div class="input-editor">
+          <pre id="input-ghost" class="input-ghost" aria-hidden="true"></pre>
+          <textarea id="composer-input" rows="1" spellcheck="false" aria-label="消息与命令" aria-describedby="notice" placeholder="输入消息、粘贴图片，或 / 查看命令"></textarea>
+        </div>
+      </div>
+    </footer>
+  </div>
+  <div id="attachment-dock" class="attachment-dock">
+    <div id="attachment-tray" class="attachment-tray"></div>
+  </div>
+  <span id="cell-measure" aria-hidden="true">MMMMMMMMMM</span>
+  <script>(() => {
+  'use strict';
+  const process = { platform: '', arch: '', version: '', env: {} };
+  const path = { dirname(value) {
+    const normalized = String(value).replaceAll('\\', '/').replace(/\/+$/, '');
+    const index = normalized.lastIndexOf('/');
+    return index < 0 ? '.' : index === 0 ? '/' : normalized.slice(0, index);
+  } };
+  const Buffer = {
+    byteLength: value => new TextEncoder().encode(value).length,
+    from: value => ({ toString: () => {
+      const bytes = new TextEncoder().encode(value);
+      return btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join('')).replaceAll('+', '-').replaceAll('/', '_').replace(/=+$/, '');
+    } })
+  };
+  const copyText = async () => { throw new Error('Use the native clipboard adapter'); };
+  const readClipboard = copyText;
+  const APP_VERSION = "0.1.80";
+  const PROVIDERS = ["claude","codex","dsh","opencode"];
+  const PRODUCT_NAME_CONTROL_PROTOCOL_VERSION_module = (() => {
+const PRODUCT_NAME = 'Last Order';
+const PRODUCT_SLUG = 'last-order';
+const PRODUCT_COMPACT_NAME = 'LastOrder';
+const LEGACY_PRODUCT_SLUG = 'lastorder';
+const SERVICE_NAME = 'Mission Control';
+const DATA_DIRECTORY_NAME = 'last-order';
+const LEGACY_DATA_DIRECTORY_NAME = 'lastorder';
+const WORKTREE_DIRECTORY_NAME = '.last-order-workspaces';
+const LEGACY_WORKTREE_DIRECTORY_NAME = '.lastorder-workspaces';
+const BRANCH_PREFIX = 'last-order';
+const LEGACY_BRANCH_PREFIX = 'lastorder';
+const CONTROL_PROTOCOL_VERSION = 2;
+
+return { PRODUCT_NAME, CONTROL_PROTOCOL_VERSION };
+})();
+const { PRODUCT_NAME, CONTROL_PROTOCOL_VERSION } = PRODUCT_NAME_CONTROL_PROTOCOL_VERSION_module;
+
+  const DEFAULT_CONFIG_validateConfig_module = (() => {
+
+const DEFAULT_CONFIG = Object.freeze({
+  manager: 'codex',
+  worker: 'codex',
+  managerModel: 'deepseek-flash',
+  managerEffort: 'high',
+  workerModel: 'deepseek-flash',
+  workerEffort: 'high',
+  managerPrompt: '',
+  workerPrompt: '',
+  codexApprovals: 'auto_review',
+  maxWorkers: 4,
+  silenceMs: 600_000,
+  mouseSelection: 'native',
+  showShortcutHints: true
+});
+
+function validateConfig(config) {
+  if (!PROVIDERS.includes(config.manager) || !PROVIDERS.includes(config.worker)) throw new Error('Unknown provider');
+  for (const key of ['managerModel', 'managerEffort', 'workerModel', 'workerEffort']) {
+    if (typeof config[key] !== 'string' || config[key].length > 200) throw new Error(`${key} must be a string up to 200 characters`);
+  }
+  for (const key of ['managerPrompt', 'workerPrompt']) {
+    if (typeof config[key] !== 'string' || config[key].length > 50_000) throw new Error(`${key} must be a string up to 50000 characters`);
+  }
+  if (!['auto_review', 'user'].includes(config.codexApprovals)) throw new Error('Codex approvals must be auto_review or user');
+  if (!Number.isInteger(config.maxWorkers) || config.maxWorkers < 1 || config.maxWorkers > 32) throw new Error('maxWorkers must be 1..32');
+  if (!Number.isFinite(config.silenceMs) || config.silenceMs < 1000) throw new Error('Silence threshold must be at least one second');
+  if (!['native', 'app'].includes(config.mouseSelection)) throw new Error('mouseSelection must be native or app');
+  if (typeof config.showShortcutHints !== 'boolean') throw new Error('showShortcutHints must be a boolean');
+  return config;
+}
+
+function normalizeConfig(saved = {}, overrides = {}) {
+  const silenceMs = overrides.silenceMinutes !== undefined
+    ? Number(overrides.silenceMinutes) * 60_000
+    : Number(overrides.silenceMs ?? saved.silenceMs ?? DEFAULT_CONFIG.silenceMs);
+  return validateConfig({
+    manager: overrides.manager ?? saved.manager ?? DEFAULT_CONFIG.manager,
+    worker: overrides.worker ?? saved.worker ?? DEFAULT_CONFIG.worker,
+    managerModel: overrides.managerModel ?? (saved.managerModel || DEFAULT_CONFIG.managerModel),
+    managerEffort: overrides.managerEffort ?? (saved.managerEffort || DEFAULT_CONFIG.managerEffort),
+    workerModel: overrides.workerModel ?? (saved.workerModel || DEFAULT_CONFIG.workerModel),
+    workerEffort: overrides.workerEffort ?? (saved.workerEffort || DEFAULT_CONFIG.workerEffort),
+    managerPrompt: overrides.managerPrompt ?? saved.managerPrompt ?? DEFAULT_CONFIG.managerPrompt,
+    workerPrompt: overrides.workerPrompt ?? saved.workerPrompt ?? DEFAULT_CONFIG.workerPrompt,
+    codexApprovals: overrides.codexApprovals ?? saved.codexApprovals ?? DEFAULT_CONFIG.codexApprovals,
+    maxWorkers: Number(overrides.maxWorkers ?? saved.maxWorkers ?? DEFAULT_CONFIG.maxWorkers),
+    silenceMs,
+    mouseSelection: overrides.mouseSelection ?? saved.mouseSelection ?? DEFAULT_CONFIG.mouseSelection,
+    showShortcutHints: overrides.showShortcutHints ?? saved.showShortcutHints ?? DEFAULT_CONFIG.showShortcutHints
+  });
+}
+
+
+return { DEFAULT_CONFIG, validateConfig };
+})();
+const { DEFAULT_CONFIG, validateConfig } = DEFAULT_CONFIG_validateConfig_module;
+
+  const COMMANDS_commandUsage_commandCompletions_fileQuery_module = (() => {
+const COMMANDS = [
+  { name: 'help', description: '查看帮助' },
+  { name: 'version', description: '查看 Last Order、Mission Control、provider 与运行平台版本' },
+  { name: 'reload', description: '快速重启 Last Order 并应用最新配置' },
+  { name: 'settings', description: '配置启动参数，保存后重启生效' },
+  { name: 'monitor', usage: '[worker_id]', description: '在独立窗口监视 worker', args: 'worker' },
+  { name: 'manager', description: '打开 Manager 对话' },
+  { name: 'workers', usage: '[all]', description: '打开 Worker 列表；all 一次性显示已归档 worker', args: 'text' },
+  { name: 'archive', usage: '[worker_id|all]', description: '在 Workers 页面归档停止的 worker，all 批量归档', args: 'text' },
+  { name: 'quote', usage: '[actor:]#seq 指令', description: '引用 Manager 或 Worker 历史消息并发送给 Manager', args: 'text', required: true },
+  { name: 'interrupt', usage: '[消息]', description: '中止 Manager 当前工作；带消息时优先处理新消息', args: 'text' },
+  { name: 'memory', usage: 'status|clear', description: '查看或清空 Manager 原生会话', args: 'text' },
+  { name: 'skills', usage: '[manager|worker_id]', description: '列出当前 Codex 会话可见的 skills', args: 'worker' },
+  { name: 'w', description: '打开 Workers 界面' },
+  { name: 'msg', usage: 'worker_id 消息', description: '向指定 worker 发消息，操作同步给 manager', args: 'worker-message', required: true },
+  { name: 'pause', description: '暂停选中 worker', worker: true },
+  { name: 'resume', description: '恢复选中 worker', worker: true },
+  { name: 'cancel', description: '取消选中 worker', worker: true },
+  { name: 'retry', usage: '[原因]', description: '重试选中 worker', args: 'text', worker: true },
+  { name: 'select', usage: 'worker_id', description: '选中 worker 并打开详情', args: 'worker', required: true },
+  { name: 'open', usage: '相对路径', description: '查看 worker 的文件或目录', args: 'path', worker: true },
+  { name: 'back', description: '工作区上一级目录', worker: true },
+  { name: 'diff', usage: 'task|uncommitted', description: '查看累计或未提交改动', args: 'diff', required: true, worker: true },
+  { name: 'refresh', description: '刷新当前工作区或 Git' },
+  { name: 'approval', usage: 'approval_id', description: '查看完整审批请求', args: 'approval', required: true },
+  { name: 'approve', usage: 'approval_id', description: '批准一次权限请求', args: 'approval', required: true },
+  { name: 'deny', usage: 'approval_id', description: '拒绝权限请求', args: 'approval', required: true },
+  { name: 'question', usage: 'question_id', description: '查看待答问题', args: 'question', required: true },
+  { name: 'answer', usage: 'question_id 答复', description: '回答待答问题', args: 'question', required: true },
+  { name: 'expand', usage: '[组号|all]', description: '展开后台过程', args: 'group' },
+  { name: 'collapse', usage: '[组号|all]', description: '折叠后台过程', args: 'group' },
+  { name: 'quit', description: '只退出 TUI，后台任务继续运行' },
+  { name: 'shutdown', description: '关闭 TUI 和整个 Last Order 后台任务' }
+  ,
+  { name: 'checkpoint', usage: '[名称]', description: '创建 workspace 与原生会话 checkpoint', args: 'text' },
+  { name: 'checkpoints', description: '列出 Last Order checkpoints' },
+  { name: 'restore', usage: 'id [files|conversation|all] confirm', description: '恢复 checkpoint；需要 confirm 二次确认', args: 'text', required: true },
+  { name: 'turns', usage: '[manager|worker_id]', description: '列出原生会话 turns', args: 'worker' },
+  { name: 'fork', usage: 'turn_id [manager|worker_id]', description: '从原生 turn fork 对话', args: 'text', required: true },
+  { name: 'revert', usage: 'turn_id --yes [manager|worker_id]', description: '删除 turn 及后续历史，不改文件', args: 'text', required: true }
+];
+
+const commandUsage = command => '/' + command.name + (command.usage ? ' ' + command.usage : '');
+const MEMORY_ACTIONS = [
+  { value: 'status', description: '查看当前 Manager native thread' },
+  { value: 'clear', description: '清空 Manager 记忆并开启新的 native 会话' }
+];
+function fileQuery(input) {
+  const match = /^\/open\s+(.*)$/is.exec(input);
+  if (!match) return null;
+  const token = match[1].replaceAll('\\', '/'), slash = token.lastIndexOf('/');
+  return { directory: token.slice(0, slash + 1), prefix: token.slice(slash + 1) };
+}
+
+function commandCompletions(input, context = {}) {
+  if (/^-[A-Za-z]{0,2}$/.test(input)) {
+    const prefix = input.slice(1).toLowerCase();
+    const items = (context.projects ?? [])
+      .filter(project => project.code.toLowerCase().startsWith(prefix))
+      .map(project => ({
+        value: '-' + project.code + ' ',
+        label: '-[' + project.code + ']',
+        description: project.root + (project.active ? ' · 当前项目' : '')
+      }));
+    return { items, hint: items.length ? '↑↓ 选择项目 · Tab 填入 · Esc 收起' : '没有匹配的项目' };
+  }
+  if (input.includes('$')) {
+    const skillMatch = /^(.*?)\$([^\s]*)$/s.exec(input);
+    if (!skillMatch) return { items: [], hint: '' };
+    const [, before, prefix] = skillMatch;
+    const skills = context.skills ?? [];
+    const items = skills
+      .filter(skill => skill.enabled !== false && skill.name.toLowerCase().startsWith(prefix.toLowerCase()))
+      .map(skill => ({
+        value: before + '$' + skill.name + ' ',
+        label: '$' + skill.name,
+        description: skill.description + (skill.scope ? ` · ${skill.scope}` : '')
+      }));
+    return { items, hint: context.skillHint || (items.length ? '↑↓ 选择 skill · Tab 填入 · Esc 收起' : '没有匹配的 skill') };
+  }
+  if (!input.startsWith('/')) return { items: [], hint: '' };
+  const match = /^\/(\S*)(?:\s+(.*))?$/s.exec(input);
+  if (!match) return { items: [], hint: '输入 /help 查看命令' };
+  const [, name, argument] = match;
+  const command = COMMANDS.find(c => c.name === name.toLowerCase());
+  const description = c => c.description + (c.worker ? context.worker ? ` · ${context.worker.id}` : ' · 需先选择 worker' : '');
+  if (argument === undefined) {
+    const items = COMMANDS.filter(c => c.name.startsWith(name.toLowerCase()))
+      .sort((a, b) => Number(b.name === name.toLowerCase()) - Number(a.name === name.toLowerCase()))
+      .map(c => ({ value: '/' + c.name + (c.args ? ' ' : ''), label: commandUsage(c), description: description(c) }));
+    return { items, command, hint: items.length ? '↑↓ 选择 · Tab 填入 · Esc 收起' : '没有匹配命令，输入 /help 查看帮助' };
+  }
+  if (!command) return { items: [], hint: '未知命令，输入 /help 查看帮助' };
+  const hint = commandUsage(command) + ' · ' + description(command);
+  const prefix = argument.toLowerCase(), values = [];
+  if (command.name === 'msg') {
+    const target = input.replace(/^\/msg\s*/i, '');
+    if (!/\s/.test(target)) {
+      const items = (context.workers ?? [])
+        .filter(worker => worker.id.toLowerCase().startsWith(target.toLowerCase()))
+        .map(worker => ({
+          value: '/msg ' + worker.id + ' ',
+          label: worker.id,
+          description: `${worker.provider ?? ''} / ${worker.kind ?? ''} · ${worker.status ?? ''} · ${worker.title ?? context.pipelines?.[worker.pipelineId]?.title ?? ''}`
+        }));
+      return { command, hint, items };
+    }
+    return { command, hint, items: [] };
+  }
+  if (command.name === 'memory') {
+    const items = MEMORY_ACTIONS.filter(item => item.value.startsWith(prefix)).map(item => ({
+      value: '/memory ' + item.value,
+      label: item.value,
+      description: item.description
+    }));
+    return { command, hint, items };
+  }
+  if (command.args === 'worker') for (const worker of context.workers ?? []) values.push({ value: worker.id, description: `${worker.provider ?? ''} / ${worker.kind ?? ''} · ${worker.status ?? ''} · ${worker.title ?? context.pipelines?.[worker.pipelineId]?.title ?? ''}` });
+  if (['approval', 'question'].includes(command.args) && !/\s/.test(argument)) {
+    const requests = command.args === 'approval' ? context.approvals ?? [] : context.questions ?? [];
+    for (const request of requests) values.push({ value: request.id, description: `[${request.actor}] ${request.detail?.reason ?? request.detail?.command ?? request.detail?.question ?? ''}` });
+  }
+  if (command.args === 'diff') values.push({ value: 'task', description: '自任务基础版本以来的累计改动' }, { value: 'uncommitted', description: '当前未提交改动' });
+  if (command.args === 'group') {
+    values.push({ value: 'all', description: '当前对话的全部后台过程' });
+    for (let i = 0; i < (context.groups ?? []).length; i++) values.push({ value: String(i + 1), description: `后台过程 · ${context.groups[i].events.length} 条记录` });
+  }
+  if (command.args === 'path') {
+    const query = fileQuery(input);
+    const items = (context.files ?? []).filter(file => !file.symlink && file.name.toLowerCase().startsWith(query.prefix.toLowerCase())).map(file => ({
+      value: '/open ' + query.directory + file.name + (file.directory ? '/' : ''),
+      label: file.name + (file.directory ? '/' : ''), description: file.directory ? '目录' : '文件'
+    }));
+    return { command, hint: hint + (context.fileHint ? ' · ' + context.fileHint : ''), items };
+  }
+  const items = values.filter(value => value.value.toLowerCase().startsWith(prefix)).map(value => ({
+    ...value, label: value.value, value: '/' + command.name + ' ' + value.value + (command.name === 'answer' ? ' ' : '')
+  }));
+  const emptyHint = command.args === 'approval' && !values.length ? ' · 当前无待审批请求'
+    : command.args === 'question' && !values.length && !/\s/.test(argument) ? ' · 当前无待答问题' : '';
+  return { command, hint: hint + emptyHint, items };
+}
+
+return { COMMANDS, commandUsage, commandCompletions, fileQuery };
+})();
+const { COMMANDS, commandUsage, commandCompletions, fileQuery } = COMMANDS_commandUsage_commandCompletions_fileQuery_module;
+
+  const renderMarkdown_styledWidth_stripFormatting_module = (() => {
+const cellWidth = char => /\p{Mark}/u.test(char) ? 0
+  : /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1faff}]/u.test(char) ? 2 : 1;
+const textWidth = text => Array.from(String(text ?? '')).reduce((sum, char) => sum + cellWidth(char), 0);
+
+function stripFormatting(text) {
+  return String(text ?? '')
+    .replace(/\x1b\]8;;.*?(?:\x07|\x1b\\)/g, '')
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+}
+
+function styledWidth(text) {
+  return Array.from(stripFormatting(text)).reduce((sum, char) => sum + cellWidth(char), 0);
+}
+
+function safeLink(url) {
+  const value = String(url ?? '').trim();
+  if (/^(?:https?:\/\/|mailto:)/i.test(value)) return value.replace(/[\x00-\x20\x7f]/g, encodeURIComponent);
+  if (/^lastorder-copy:[A-Za-z0-9_-]+$/.test(value)) return value;
+  if (/^[A-Za-z]:[\\/]/.test(value)) return value;
+  if (value && !/^[a-z][a-z0-9+.-]*:/i.test(value) && !/[\x00-\x1f\x7f]/.test(value)) return value;
+  return '';
+}
+
+function fileMention(value) {
+  const text = String(value ?? '').trim();
+  if (!text || /^(?:https?:\/\/|mailto:)/i.test(text) || /\s{2,}/.test(text)) return null;
+  const hash = /^(.+?)#L(\d+)(?:-L?(\d+))?$/i.exec(text);
+  const match = hash ?? /^(.+?)(?::(\d+)(?:-(\d+))?)?$/.exec(text);
+  if (!match) return null;
+  const file = match[1];
+  if (!(/(?:^|[\\/])[^\\/]+\.[a-z0-9]{1,12}$/i.test(file) || /^[A-Za-z]:[\\/]/.test(file))) return null;
+  const anchor = match[2] ? `#L${match[2]}${match[3] ? `-L${match[3]}` : ''}` : '';
+  return { text, target: file.replaceAll('\\', '/') + anchor };
+}
+
+function inlineSegments(text, base = {}) {
+  const segments = [], pattern = /(\[([^\]]+)\]\(([^)\s]+)\)|\{\{file:([^}]+)\}\}|`([^`]+)`|\*\*([^*]+)\*\*|\*([^*]+)\*)/g;
+  let last = 0, match;
+  while ((match = pattern.exec(text))) {
+    if (match.index > last) segments.push({ ...base, text: text.slice(last, match.index) });
+    if (match[2] !== undefined) {
+      const link = safeLink(match[3]);
+      segments.push({ ...base, text: match[2], link: link || null, underline: Boolean(link) });
+    } else if (match[4] !== undefined) {
+      const mention = fileMention(match[4]);
+      segments.push({ ...base, text: mention?.text ?? match[4], link: mention?.target ?? null, underline: Boolean(mention), code: true });
+    } else if (match[5] !== undefined) {
+      const mention = fileMention(match[5]);
+      segments.push({ ...base, text: match[5], link: mention?.target ?? null, underline: Boolean(mention), code: true });
+    } else if (match[6] !== undefined) segments.push({ ...base, text: match[6], bold: true });
+    else if (match[7] !== undefined) segments.push({ ...base, text: match[7], italic: true });
+    last = pattern.lastIndex;
+  }
+  if (last < text.length) segments.push({ ...base, text: text.slice(last) });
+  return segments;
+}
+
+function styleSegment(segment, text) {
+  if (!text) return '';
+  const prefix = [];
+  if (segment.link) prefix.push(`\x1b]8;;${segment.link}\x1b\\`);
+  if (segment.bold) prefix.push('\x1b[1m');
+  if (segment.italic) prefix.push('\x1b[3m');
+  if (segment.underline) prefix.push('\x1b[4m');
+  if (segment.code) prefix.push('\x1b[36m');
+  if (segment.dim) prefix.push('\x1b[2m');
+  const suffix = (prefix.length ? '\x1b[0m' : '') + (segment.link ? '\x1b]8;;\x1b\\' : '');
+  return prefix.join('') + text + suffix;
+}
+
+function wrapSegments(segments, columns) {
+  const lines = [];
+  let current = [], used = 0;
+  const push = () => { lines.push(current); current = []; used = 0; };
+  for (const segment of segments) {
+    let chunk = '';
+    for (const char of segment.text) {
+      const size = cellWidth(char);
+      if (used + size > columns && (current.length || chunk)) {
+        if (chunk) current.push({ ...segment, text: chunk });
+        push(); chunk = '';
+      }
+      chunk += char; used += size;
+    }
+    if (chunk) current.push({ ...segment, text: chunk });
+  }
+  if (current.length || !lines.length) push();
+  return lines.map(line => line.map(segment => styleSegment(segment, segment.text)).join(''));
+}
+
+function indentContinuation(segments, prefix, columns) {
+  const first = wrapSegments(segments, Math.max(1, columns - cellWidth(prefix)));
+  return first.map((line, index) => (index ? ' '.repeat(Math.min(columns, Array.from(prefix).reduce((sum, char) => sum + cellWidth(char), 0))) : prefix) + line);
+}
+
+function splitTableRow(line) {
+  const value = String(line).trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells = [];
+  let cell = '';
+  for (let index = 0; index < value.length; index++) {
+    const char = value[index];
+    if (char === '\\' && value[index + 1] === '|') { cell += '|'; index++; continue; }
+    if (char === '|') { cells.push(cell.trim()); cell = ''; continue; }
+    cell += char;
+  }
+  cells.push(cell.trim());
+  return cells;
+}
+
+function tableAlignments(line) {
+  const cells = splitTableRow(line);
+  if (!cells.length || !cells.every(cell => /^:?-{3,}:?$/.test(cell))) return null;
+  return cells.map(cell => cell.startsWith(':') && cell.endsWith(':') ? 'center' : cell.endsWith(':') ? 'right' : 'left');
+}
+
+function plainCell(value) {
+  return stripFormatting(String(value))
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/\{\{file:([^}]+)\}\}/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/`([^`]+)`/g, '$1')
+    .trim();
+}
+
+function wrapCell(value, width) {
+  const lines = [];
+  let line = '', used = 0;
+  for (const char of plainCell(value)) {
+    const size = cellWidth(char);
+    if (used + size > width && line) { lines.push(line); line = ''; used = 0; }
+    line += char; used += size;
+  }
+  lines.push(line);
+  return lines.length ? lines : [''];
+}
+
+function fitCell(value, width, alignment = 'left') {
+  const padding = Math.max(0, width - textWidth(value));
+  if (alignment === 'right') return ' '.repeat(padding) + value;
+  if (alignment === 'center') {
+    const left = Math.floor(padding / 2);
+    return ' '.repeat(left) + value + ' '.repeat(padding - left);
+  }
+  return value + ' '.repeat(padding);
+}
+
+function renderTable(rows, alignments, columns) {
+  const count = Math.max(2, ...rows.map(row => row.length));
+  const normalized = rows.map(row => Array.from({ length: count }, (_, index) => plainCell(row[index] ?? '')));
+  const totalBorder = count * 3 + 1;
+  if (columns < totalBorder + count) {
+    return normalized.map((row, index) => styleSegment({ bold: index === 0 }, row.join(' · ')));
+  }
+  const budget = columns - totalBorder;
+  const widths = Array.from({ length: count }, (_, index) => Math.max(1, ...normalized.map(row => textWidth(row[index]))));
+  while (widths.reduce((sum, width) => sum + width, 0) > budget) {
+    let widest = 0;
+    for (let index = 1; index < count; index++) if (widths[index] > widths[widest]) widest = index;
+    if (widths[widest] <= 1) break;
+    widths[widest]--;
+  }
+  const border = (left, middle, right) => left + widths.map(width => '─'.repeat(width + 2)).join(middle) + right;
+  const output = [border('┌', '┬', '┐')];
+  normalized.forEach((row, rowIndex) => {
+    const wrapped = row.map((cell, index) => wrapCell(cell, widths[index]));
+    const height = Math.max(...wrapped.map(lines => lines.length));
+    for (let line = 0; line < height; line++) {
+      output.push('│ ' + wrapped.map((lines, index) => fitCell(lines[line] ?? '', widths[index], alignments[index] ?? 'left')).join(' │ ') + ' │');
+    }
+    if (rowIndex === 0) output.push(border('├', '┼', '┤'));
+  });
+  output.push(border('└', '┴', '┘'));
+  return output;
+}
+
+function renderMarkdown(text, columns = 80) {
+  columns = Math.max(1, columns);
+  const source = stripFormatting(text).replace(/\r\n?/g, '\n').replace(/\t/g, '    ');
+  const sourceLines = source.split('\n');
+  const output = [];
+  let fenced = false, language = '', codeLines = [];
+  for (let lineIndex = 0; lineIndex < sourceLines.length; lineIndex++) {
+    const raw = sourceLines[lineIndex];
+    if (/^\s*```/.test(raw)) {
+      if (!fenced) {
+        fenced = true; language = raw.trim().slice(3).trim();
+        codeLines = [];
+        output.push(styleSegment({ dim: true }, '┌─ ' + (language || 'code')));
+      } else {
+        fenced = false;
+        output.push(styleSegment({ dim: true }, '└─'));
+        const code = codeLines.join('\n');
+        if (code && Buffer.byteLength(code) <= 16_000) {
+          const target = 'lastorder-copy:' + Buffer.from(code).toString('base64url');
+          output.push(styleSegment({ link: target, underline: true, dim: true }, '[copy code]'));
+        }
+        codeLines = [];
+      }
+      continue;
+    }
+    if (fenced) {
+      codeLines.push(raw);
+      for (const line of wrapSegments([{ text: raw || ' ' }], Math.max(1, columns - 2))) output.push(styleSegment({ dim: true }, '│ ') + line);
+      continue;
+    }
+    if (raw.includes('|')) {
+      const alignments = tableAlignments(sourceLines[lineIndex + 1] ?? '');
+      if (alignments) {
+        const rows = [splitTableRow(raw)];
+        let next = lineIndex + 2;
+        while (next < sourceLines.length && sourceLines[next].trim() && sourceLines[next].includes('|')) {
+          rows.push(splitTableRow(sourceLines[next]));
+          next++;
+        }
+        output.push(...renderTable(rows, alignments, columns));
+        lineIndex = next - 1;
+        continue;
+      }
+    }
+    if (!raw.trim()) { output.push(''); continue; }
+    const heading = /^(#{1,6})\s+(.*)$/.exec(raw);
+    if (heading) {
+      output.push(...wrapSegments([{ text: heading[2], bold: true, underline: heading[1].length <= 2 }], columns));
+      continue;
+    }
+    if (/^\s*(?:---|\*\*\*|___)\s*$/.test(raw)) { output.push('─'.repeat(columns)); continue; }
+    const quote = /^>\s?(.*)$/.exec(raw);
+    if (quote) { output.push(...indentContinuation(inlineSegments(quote[1], { dim: true }), '│ ', columns)); continue; }
+    const list = /^(\s*)([-*+]|\d+\.)\s+(.*)$/.exec(raw);
+    if (list) {
+      const prefix = list[1] + (/\d/.test(list[2]) ? list[2] : '•') + ' ';
+      output.push(...indentContinuation(inlineSegments(list[3]), prefix, columns));
+      continue;
+    }
+    output.push(...wrapSegments(inlineSegments(raw), columns));
+  }
+  return output;
+}
+
+return { renderMarkdown, styledWidth, stripFormatting };
+})();
+const { renderMarkdown, styledWidth, stripFormatting } = renderMarkdown_styledWidth_stripFormatting_module;
+
+  const stripVTControlCharacters = stripFormatting;
+  const conversationGroups_eventContent_toolName_module = (() => {
+// Presentation only: the original event log stays intact for inspection/resume.
+function conversationGroups(events) {
+  const groups = [];
+  for (const [index, event] of events.entries()) {
+    if (!['message', 'manager_input', 'worker_input', 'progress', 'reported_result'].includes(event.type)) continue;
+    const role = event.data.role;
+    const foreground = ['manager_input', 'worker_input', 'reported_result'].includes(event.type) || ['user', 'question', 'error', 'warning'].includes(role);
+    const background = !foreground && (event.data.background || role === 'tool' || event.type === 'progress');
+    if (background) {
+      const previous = groups.at(-1);
+      if (previous?.kind === 'background') previous.events.push(event);
+      else groups.push({ kind: 'background', id: String(event.seq ?? index), events: [event] });
+    } else groups.push({ kind: 'message', event });
+  }
+  return groups;
+}
+
+function eventText(event) {
+  return `[${event.data.role ?? event.type}] ${eventContent(event)}`;
+}
+
+function pretty(value) {
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
+function toolName(event) {
+  return event.data.tool?.name ?? event.data.tool?.type;
+}
+
+function eventContent(event) {
+  const data = event.data;
+  if (data.tool) {
+    const tool = data.tool, parts = [];
+    if (tool.arguments !== null && tool.arguments !== undefined) parts.push('参数：\n' + pretty(tool.arguments));
+    if (tool.exitCode !== null && tool.exitCode !== undefined) parts.push('退出码：' + tool.exitCode);
+    if (tool.durationMs !== null && tool.durationMs !== undefined) parts.push('耗时：' + tool.durationMs + ' ms');
+    if (tool.result !== null && tool.result !== undefined) parts.push('结果：\n' + pretty(tool.result));
+    if (tool.error !== null && tool.error !== undefined) parts.push('错误：\n' + pretty(tool.error));
+    if (tool.changes && (tool.result === null || tool.result === undefined)) parts.push('文件变更：\n' + pretty(tool.changes));
+    return parts.length ? parts.join('\n\n') : String(data.text ?? '');
+  }
+  const text = data.text ?? data.message ?? data.summary ?? JSON.stringify(data, null, 2);
+  const attachmentText = data.attachments?.length
+    ? '\n\nImage attachments:\n' + data.attachments.map(image => `- ${image.name} (${image.mime}, ${image.path})`).join('\n')
+    : '';
+  return event.type === 'reported_result' ? `${data.status}\n${text}${data.evidence ? '\n\n验证证据：\n' + data.evidence : ''}${attachmentText}` : text + attachmentText;
+}
+
+return { conversationGroups, eventContent, toolName };
+})();
+const { conversationGroups, eventContent, toolName } = conversationGroups_eventContent_toolName_module;
+
+  const clean_fit_fitStyled_wrap_width_border_messageLabel_conversationPresentation_renderConversation_module = (() => {
+
+const USER_MESSAGE_BORDER = '\x1b[38;5;214m';
+const RESET = '\x1b[0m';
+
+const clean = text => stripVTControlCharacters(String(text)).replace(/\t/g, '    ').replace(/[\x00-\x08\x0b-\x1f\x7f]/g, '');
+const width = char => /\p{Mark}/u.test(char) ? 0 : /[\u1100-\u115f\u2329\u232a\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe10-\ufe19\ufe30-\ufe6f\uff00-\uff60\uffe0-\uffe6\u{1f300}-\u{1faff}]/u.test(char) ? 2 : 1;
+function fit(text, columns) {
+  let used = 0, result = '';
+  for (const char of clean(text).replace(/\n/g, ' ')) {
+    if (used + width(char) > columns) break;
+    result += char; used += width(char);
+  }
+  return result + ' '.repeat(Math.max(0, columns - used));
+}
+
+function fitStyled(text, columns) {
+  const source = String(text ?? '').replace(/\r?\n/g, ' ');
+  const escapePattern = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\]8;;[^\x07\x1b]*(?:\x07|\x1b\\))/g;
+  let used = 0, result = '', last = 0, match, hasStyle = false, linkOpen = false;
+  const appendPlain = value => {
+    for (const char of value) {
+      const size = width(char);
+      if (used + size > columns) return false;
+      result += char; used += size;
+    }
+    return true;
+  };
+  while ((match = escapePattern.exec(source))) {
+    if (!appendPlain(source.slice(last, match.index))) break;
+    const escape = match[0];
+    result += escape; hasStyle = true;
+    if (escape.startsWith('\x1b]8;;')) linkOpen = !escape.startsWith('\x1b]8;;\x1b\\');
+    last = escapePattern.lastIndex;
+  }
+  if (last < source.length) appendPlain(source.slice(last));
+  if (hasStyle) {
+    result += '\x1b[0m';
+    if (linkOpen) result += '\x1b]8;;\x1b\\';
+  }
+  return result + ' '.repeat(Math.max(0, columns - used));
+}
+function wrap(text, columns) {
+  columns = Math.max(1, columns);
+  const lines = [];
+  for (const paragraph of clean(text).split('\n')) {
+    let line = '', used = 0;
+    for (const char of paragraph) {
+      const size = width(char);
+      if (used + size > columns) { lines.push(line); line = ''; used = 0; }
+      line += char; used += size;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+function border(title, columns, left = '╭', right = '╮') {
+  return left + fit(title ? '─ ' + title + ' ' : '', columns - 2).replace(/ +$/, spaces => '─'.repeat(spaces.length)) + right;
+}
+function boxedLines(text, inside) {
+  return renderMarkdown(text, inside).map(line => {
+    const padding = Math.max(0, inside - styledWidth(line));
+    return '│  ' + line + ' '.repeat(padding) + '  │';
+  });
+}
+function messageBox(title, text, columns, borderColor = '', intermediate = null) {
+  const inside = Math.max(1, columns - 6);
+  const color = line => borderColor ? borderColor + line + RESET : line;
+  const lines = [];
+  if (intermediate) {
+    lines.push(color(border(intermediate.title, columns)));
+    if (intermediate.expanded) lines.push(...boxedLines(intermediate.expandedContent, inside));
+    lines.push('├' + '─'.repeat(Math.max(0, columns - 2)) + '┤');
+    lines.push(...boxedLines(`${title}\n${text}`, inside));
+  } else {
+    lines.push(color(border(title, columns)));
+    lines.push(...boxedLines(text, inside));
+  }
+  lines.push(color(border('', columns, '╰', '╯')), '');
+  return lines;
+}
+function messageLabel(event, actor) {
+  const role = event.data.role ?? ({ manager_input: 'user', worker_input: event.data.source === 'manager' ? 'manager' : 'user', reported_result: 'result', progress: 'progress' })[event.type];
+  const tool = event.data.tool;
+  const status = { running: '运行中', started: '运行中', inProgress: '运行中', in_progress: '运行中', completed: '完成', succeeded: '成功', failed: '失败', error: '错误', cancelled: '已取消' }[tool?.status] ?? tool?.status;
+  const label = tool
+    ? `工具 · ${tool.name ?? tool.type ?? 'call'}${status ? ' · ' + status : ''}${tool.id ? ' · ' + String(tool.id).slice(-8) : ''}`
+    : { user: '用户', assistant: actor === 'manager' ? 'Manager' : 'Worker', manager: 'Manager → Worker', tool: '工具', question: '需要答复', error: '错误', warning: '提示', result: '任务结果', progress: '进度', system: '系统' }[role] ?? role ?? event.type;
+  const time = event.time ? new Date(event.time) : null;
+  return label + (event.seq ? ` · #${event.seq}` : '') + (time && !Number.isNaN(time.valueOf()) ? ' · ' + time.toLocaleTimeString('zh-CN', { hour12: false }) : '') + (event.data.streaming ? ' · 生成中' : '');
+}
+
+function conversationPresentation(events, actor, options = {}) {
+  if (!actor) return [];
+  const expandedActors = options.expandedActors ?? new Set();
+  const expandedGroups = options.expandedGroups ?? new Set();
+  const collapsedGroups = options.collapsedGroups ?? new Set();
+  let number = 0;
+  const presented = conversationGroups(events).map(group => {
+    if (group.kind === 'message') return { ...group, title: messageLabel(group.event, actor), content: eventContent(group.event) };
+    number++;
+    const key = actor + ':' + group.id;
+    const expanded = !collapsedGroups.has(key) && (expandedActors.has(actor) || expandedGroups.has(key));
+    const names = [...new Set(group.events.map(toolName).filter(Boolean))].slice(0, 4);
+    const assistantOnly = group.events.every(event => event.data.role === 'assistant');
+    const title = `${expanded ? '−' : '+'} ${assistantOnly ? '中间回复' : '后台过程'} #${number} · ${group.events.length} 条${names.length ? ' · ' + names.join('/') : ''}`;
+    const expandedContent = group.events.map(event => `${messageLabel(event, actor)}\n${String(eventContent(event)).split('\n').map(line => '  ' + line).join('\n')}`).join('\n\n') + `\n\n/collapse ${number} 收起`;
+    const collapsedContent = `已折叠 · /expand ${number} 展开 · F5 展开全部`;
+    return { ...group, title, number, expanded, expandedContent, collapsedContent, content: expanded ? expandedContent : collapsedContent };
+  });
+  const combined = [];
+  for (let index = 0; index < presented.length; index++) {
+    const group = presented[index], next = presented[index + 1];
+    const assistantOnly = group.kind === 'background' && group.events.every(event => event.data.role === 'assistant');
+    if (assistantOnly && next?.kind === 'message' && next.event.data.role === 'assistant') {
+      combined.push({
+        kind: 'combined', id: next.event.seq ?? next.id,
+        event: next.event, title: next.title, content: next.content,
+        number: group.number, intermediate: group
+      });
+      index++;
+    } else combined.push(group);
+  }
+  return combined;
+}
+
+function renderConversation(events, actor, columns, options = {}) {
+  const lines = conversationPresentation(events, actor, options).flatMap(group => messageBox(
+    group.title, group.content, columns,
+    group.kind === 'message' && group.event.data.role === 'user' ? USER_MESSAGE_BORDER : '',
+    group.kind === 'combined' ? group.intermediate : null
+  ));
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+return { clean, fit, fitStyled, wrap, width, border, messageLabel, conversationPresentation, renderConversation };
+})();
+const { clean, fit, fitStyled, wrap, width, border, messageLabel, conversationPresentation, renderConversation } = clean_fit_fitStyled_wrap_width_border_messageLabel_conversationPresentation_renderConversation_module;
+
+  const TerminalUI_module = (() => {
+
+const statusLabel = status => ({ queued: '排队', starting: '启动中', running: '运行中', waiting_approval: '等待审批', paused: '已暂停', cancelled: '已取消', failed: '失败', blocked: '阻塞', blocked_requirements: '等待澄清', blocked_technical: '技术阻塞', review_failed: '验收未通过', succeeded: '已完成', interrupted: '已中断' })[status] ?? status;
+const ARCHIVABLE_WORKER_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'interrupted', 'paused', 'blocked_requirements', 'blocked_technical', 'review_failed']);
+function labeledLines(label, value, columns) {
+  const prefix = '  ' + fit(label, 4) + '  ';
+  const prefixWidth = Array.from(prefix).reduce((sum, char) => sum + width(char), 0);
+  const continuation = ' '.repeat(prefixWidth);
+  const available = Math.max(1, columns - prefixWidth);
+  return wrap(value, available).map((line, index) => fit((index ? continuation : prefix) + line, columns));
+}
+function compactLabeledLine(label, value, columns) {
+  const prefix = '  ' + fit(label, 4) + '  ';
+  return fit(prefix + tail(value, Math.max(4, columns - width(prefix))), columns);
+}
+function tail(text, columns) { let used = 0, result = ''; for (const c of Array.from(text).reverse()) { if (used + width(c) > columns) break; result = c + result; used += width(c); } return result; }
+function sliceColumns(text, start, end) {
+  let used = 0, result = '';
+  for (const char of clean(text)) {
+    const next = used + width(char);
+    if (next > start && used < end) result += char;
+    used = next;
+  }
+  return result;
+}
+function highlightColumns(text, start, end) {
+  let used = 0, active = false, result = '';
+  for (const char of text) {
+    const next = used + width(char), selected = next > start && used < end;
+    if (selected !== active) { result += selected ? '\x1b[7m' : '\x1b[0m'; active = selected; }
+    result += char; used = next;
+  }
+  return result + (active ? '\x1b[0m' : '');
+}
+function filterSelection(text) {
+  return clean(text).split('\n').map(line => line
+    .replace(/^[╭├]─\s*/, '')
+    .replace(/^│\s?/, '')
+    .replace(/\s*─*[╮┤]$/, '')
+    .replace(/\s*│$/, '')
+  ).filter(line => !/^[\s╭╮╰╯─│├┤┬┴┼]+$/u.test(line))
+    .join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+class TerminalUI {
+  constructor(service, options = {}) {
+    this.service = service; this.options = options; this.screen = 'manager'; this.workerPanel = 'chat'; this.panel = 'manager'; this.selected = 0; this.inputValue = ''; this.cursor = 0; this.inputSelection = null; this.preview = ''; this.filePath = ''; this.diffMode = 'task'; this.notice = ''; this.history = []; this.historyIndex = 0; this.historyDraft = ''; this.previewVersion = 0;
+    this.expandedActors = new Set(); this.expandedGroups = new Set(); this.collapsedGroups = new Set();
+    this.workerFocus = 'list'; this.scrollViews = new Map();
+    this.completionIndex = 0; this.completionInput = ''; this.fileCompletionVersion = 0;
+    this.skillCompletion = null; this.skillCompletionPending = null; this.skillCompletionVersion = 0;
+    this.settings = { ...DEFAULT_CONFIG, ...service.config, ...options.settings }; this.settingsDraft = null; this.settingsIndex = 0; this.settingsEditing = null;
+    this.selection = null; this.lastFrameLines = []; this.lastSize = { columns: 80, rows: 24 }; this.lastConversationView = null;
+    this.selectionAutoTimer = null; this.selectionEdge = 0; this.selectionPointer = null; this.renderDelay = 50;
+    this.showArchivedOnce = false;
+    this.submitPending = false; this.lastSubmittedText = ''; this.lastSubmittedAt = 0;
+    this.conversationCache = new Map();
+    this.projectScroll = 0;
+   
+  }
+  get allWorkers() { return Object.values(this.service.state.workers); }
+  get workers() {
+    const workers = this.allWorkers;
+    return this.showArchivedOnce ? workers : workers.filter(worker => !worker.archivedAt);
+  }
+  get worker() { return this.workers[this.selected]; }
+  get input() { return this.inputValue; }
+  set input(value) { this.inputValue = String(value ?? ''); this.cursor = this.inputCharacters.length; this.inputSelection = null; }
+  get inputCharacters() { return Array.from(this.inputValue); }
+  setInput(value, cursor = Array.from(String(value ?? '')).length) {
+    this.inputValue = String(value ?? '');
+    this.cursor = Math.max(0, Math.min(this.inputCharacters.length, cursor));
+    this.inputSelection = null;
+  }
+  inputSelectionRange() {
+    if (!this.inputSelection) return null;
+    const anchor = Math.max(0, Math.min(this.inputCharacters.length, this.inputSelection.anchor));
+    const focus = Math.max(0, Math.min(this.inputCharacters.length, this.inputSelection.focus));
+    return anchor === focus ? null : { start: Math.min(anchor, focus), end: Math.max(anchor, focus) };
+  }
+  selectedInputText() {
+    const range = this.inputSelectionRange();
+    return range ? this.inputCharacters.slice(range.start, range.end).join('') : '';
+  }
+  clearInputSelection() { this.inputSelection = null; }
+  insertInput(value) {
+    const text = String(value ?? '').replace(/\r\n?/g, '\n');
+    const chars = this.inputCharacters;
+    const insertion = Array.from(text);
+    const range = this.inputSelectionRange();
+    if (range) {
+      chars.splice(range.start, range.end - range.start);
+      this.cursor = range.start;
+      this.inputSelection = null;
+    }
+    this.cursor = Math.max(0, Math.min(chars.length, this.cursor));
+    chars.splice(this.cursor, 0, ...insertion);
+    this.inputValue = chars.join('');
+    this.cursor += insertion.length;
+  }
+  insertNewline() {
+    this.insertInput('\n');
+    this.notice = '';
+    this.historyIndex = this.history.length;
+    this.historyDraft = '';
+    this.render();
+  }
+  insertPaste(value) {
+    const text = clean(String(value ?? '')).replace(/\r\n?/g, '\n');
+    if (!text) return;
+    this.insertInput(text);
+    this.notice = `已粘贴 ${Array.from(text).length} 字符`;
+    this.historyIndex = this.history.length;
+    this.historyDraft = '';
+    this.render();
+  }
+  backspaceInput() {
+    const chars = this.inputCharacters;
+    const range = this.inputSelectionRange();
+    if (range) {
+      chars.splice(range.start, range.end - range.start);
+      this.inputValue = chars.join('');
+      this.cursor = range.start;
+      this.inputSelection = null;
+      return;
+    }
+    this.cursor = Math.max(0, Math.min(chars.length, this.cursor));
+    if (!this.cursor) return;
+    chars.splice(this.cursor - 1, 1);
+    this.inputValue = chars.join('');
+    this.cursor--;
+  }
+  deleteInput() {
+    const chars = this.inputCharacters;
+    const range = this.inputSelectionRange();
+    if (range) {
+      chars.splice(range.start, range.end - range.start);
+      this.inputValue = chars.join('');
+      this.cursor = range.start;
+      this.inputSelection = null;
+      return;
+    }
+    this.cursor = Math.max(0, Math.min(chars.length, this.cursor));
+    if (this.cursor >= chars.length) return;
+    chars.splice(this.cursor, 1);
+    this.inputValue = chars.join('');
+  }
+  moveInputCursor(delta, extend = false) {
+    const max = this.inputCharacters.length;
+    if (extend) {
+      if (!this.inputSelection) this.inputSelection = { anchor: this.cursor, focus: this.cursor };
+      this.cursor = Math.max(0, Math.min(max, this.cursor + delta));
+      this.inputSelection.focus = this.cursor;
+      if (this.inputSelection.anchor === this.cursor) this.inputSelection = null;
+      return;
+    }
+    const range = this.inputSelectionRange();
+    if (range) {
+      this.cursor = delta < 0 ? range.start : range.end;
+      this.inputSelection = null;
+      return;
+    }
+    this.cursor = Math.max(0, Math.min(max, this.cursor + delta));
+  }
+  get conversationActor() { return this.panel === 'manager' ? 'manager' : this.panel === 'chat' ? this.worker?.id : undefined; }
+  get completion() {
+    if (this.completionInput !== this.input) { this.completionInput = this.input; this.completionIndex = 0; this.completionNavigated = false; }
+    const query = fileQuery(this.input), fileKey = query ? this.worker?.id + ':' + query.directory : null;
+    const files = this.fileCompletion?.key === fileKey ? this.fileCompletion : null;
+    const result = commandCompletions(this.input, {
+      worker: this.worker, workers: this.workers, pipelines: this.service.state.pipelines,
+      approvals: this.service.approvals ? [...this.service.approvals.values()] : this.service.state.approvals,
+      questions: this.service.questions ? [...this.service.questions.values()] : this.service.state.questions,
+      groups: /^\/(?:expand|collapse)\s/.test(this.input) && this.conversationActor ? conversationGroups(this.visibleConversationEvents(this.conversationActor)).filter(g => g.kind === 'background') : [],
+      files: files?.entries, fileHint: query ? !this.worker?.workspace ? '需先选择已有工作区的 worker' : files?.error ?? (files ? '' : '正在读取目录…') : '',
+      skills: this.skillCompletion?.actor === (this.conversationActor || 'manager') ? this.skillCompletion.entries : [],
+      skillHint: this.skillCompletion?.error,
+      projects: this.service.projects ?? [{ code: '-', root: this.service.git?.root ?? '', active: true }]
+    });
+    this.completionIndex = Math.min(this.completionIndex, Math.max(0, result.items.length - 1));
+    return { ...result, active: this.input.startsWith('/') && this.dismissedCompletion !== this.input, open: result.items.length > 0 && this.dismissedCompletion !== this.input };
+  }
+  async loadCompletionFiles() {
+    const query = fileQuery(this.input), worker = this.worker;
+    if (!query || !worker?.workspace) return;
+    const key = worker.id + ':' + query.directory;
+    if (this.fileCompletion?.key === key && Date.now() - this.fileCompletion.time < 1000) return;
+    if (this.fileCompletionPending?.key === key) return this.fileCompletionPending.promise;
+    const version = ++this.fileCompletionVersion;
+    const promise = (async () => {
+      let entries, error;
+      try {
+        entries = await this.service.git.files(worker, query.directory);
+        if (!Array.isArray(entries)) { entries = []; error = '请输入目录或文件相对路径'; }
+        entries.sort((a, b) => Number(Boolean(b.directory)) - Number(Boolean(a.directory)) || a.name.localeCompare(b.name));
+      } catch { entries = []; error = '目录不可用'; }
+      if (version !== this.fileCompletionVersion || this.worker?.id !== worker.id || fileQuery(this.input)?.directory !== query.directory) return;
+      this.fileCompletion = { key, entries, error, time: Date.now() }; this.render();
+    })();
+    this.fileCompletionPending = { key, promise };
+    try { await promise; } finally { if (this.fileCompletionPending?.promise === promise) this.fileCompletionPending = null; }
+  }
+  async loadSkillCompletions() {
+    const match = /^(.*?)\$([^\s]*)$/s.exec(this.input);
+    if (!match || typeof this.service.listSkills !== 'function') return;
+    const actor = this.conversationActor || 'manager';
+    if (this.skillCompletion?.actor === actor && Date.now() - this.skillCompletion.time < 5000) return;
+    if (this.skillCompletionPending?.actor === actor) return this.skillCompletionPending.promise;
+    const version = ++this.skillCompletionVersion;
+    const promise = (async () => {
+      let entries = [], error = '';
+      try {
+        const result = await this.service.listSkills(actor, false);
+        const groups = result.skills?.data ?? result.data ?? [];
+        entries = groups.flatMap(entry => entry.skills ?? []);
+      } catch (caught) {
+        error = caught.message;
+      }
+      if (version !== this.skillCompletionVersion || (this.conversationActor || 'manager') !== actor) return;
+      this.skillCompletion = { actor, entries, error, time: Date.now() };
+      this.render();
+    })();
+    this.skillCompletionPending = { actor, promise };
+    try { await promise; } finally {
+      if (this.skillCompletionPending?.promise === promise) this.skillCompletionPending = null;
+    }
+  }
+  async fillCompletion() {
+    const item = this.completion.items[this.completionIndex];
+    if (!item) return;
+    this.input = item.value; this.notice = '';
+    this.historyIndex = this.history.length; this.historyDraft = '';
+    this.dismissedCompletion = this.input.endsWith(' ') || (fileQuery(this.input) && this.input.endsWith('/')) ? undefined : this.input;
+    this.render(); await this.loadCompletionFiles();
+  }
+  inputPresentation(columns, maxRows = Number.POSITIVE_INFINITY) {
+    const completion = this.completion;
+    const length = text => Array.from(text).reduce((sum, char) => sum + width(char), 0);
+    const raw = clean(this.input).replace(/\r\n?/g, '\n');
+    const chars = Array.from(raw), cursorIndex = Math.max(0, Math.min(chars.length, this.cursor));
+    const lineWidth = Math.max(1, columns - 2);
+    const ranges = [];
+    let start = 0, used = 0;
+    for (let index = 0; index < chars.length; index++) {
+      if (chars[index] === '\n') {
+        ranges.push({ start, end: index, newlineAt: index });
+        start = index + 1; used = 0;
+        continue;
+      }
+      const size = width(chars[index]);
+      if (index > start && used + size > lineWidth) {
+        ranges.push({ start, end: index, newlineAt: null });
+        start = index; used = 0;
+      }
+      used += size;
+    }
+    ranges.push({ start, end: chars.length, newlineAt: null });
+
+    let cursorLine = ranges.length - 1;
+    for (let index = 0; index < ranges.length; index++) {
+      const range = ranges[index];
+      if (cursorIndex < range.end || (cursorIndex === range.end && range.newlineAt === range.end)) {
+        cursorLine = index; break;
+      }
+    }
+    const rowLimit = Number.isFinite(maxRows) ? Math.max(1, Math.floor(maxRows)) : ranges.length;
+    const windowStart = Math.max(0, Math.min(cursorLine - Math.floor(rowLimit / 2), ranges.length - rowLimit));
+    const visible = ranges.slice(windowStart, windowStart + rowLimit);
+
+    let ghost = '', note = '';
+    if (completion.open) {
+      const item = completion.items[this.completionIndex];
+      const normalize = text => text.replaceAll('\\', '/').replace(/^(\S+)\s+/, '$1 ');
+      const prefix = normalize(this.input), candidate = normalize(item.value);
+      if (candidate.toLowerCase().startsWith(prefix.toLowerCase())) ghost = candidate.slice(prefix.length);
+      note = `  [${this.completionIndex + 1}/${completion.items.length}] ${item.description} · Tab 填入 · ↑↓ 切换 · Esc 收起`;
+    } else if (completion.active) {
+      const command = completion.command;
+      const argument = /^\/\S+\s+(.*)$/s.exec(this.input)?.[1];
+      if (command?.usage && argument === '') ghost = command.usage;
+      else if (command?.name === 'answer' && /^\S+\s+$/.test(argument ?? '')) ghost = '答复';
+      note = '  · ' + completion.hint;
+    } else if (!this.input) ghost = '输入消息，或 / 查看命令';
+
+    const selection = this.inputSelectionRange();
+    const lines = visible.map((range, visibleIndex) => {
+      const lineIndex = windowStart + visibleIndex;
+      const prefix = lineIndex === 0 ? '> ' : '  ';
+      const text = chars.slice(range.start, range.end).join('');
+      let cursorColumn = null;
+      if (lineIndex === cursorLine) cursorColumn = 2 + length(chars.slice(range.start, cursorIndex).join(''));
+      let highlightStart = null, highlightEnd = null;
+      if (selection) {
+        const selectedStart = Math.max(selection.start, range.start);
+        const selectedEnd = Math.min(selection.end, range.end);
+        if (selectedStart < selectedEnd) {
+          highlightStart = 2 + length(chars.slice(range.start, selectedStart).join(''));
+          highlightEnd = 2 + length(chars.slice(range.start, selectedEnd).join(''));
+        }
+      }
+      let lineGhost = '', lineNote = '';
+      if (lineIndex === ranges.length - 1) {
+        let remaining = Math.max(0, lineWidth - length(text));
+        lineGhost = fit(ghost, remaining).trimEnd(); remaining -= length(lineGhost);
+        lineNote = fit(note, remaining).trimEnd();
+      }
+      const plain = fit(prefix + text + lineGhost + lineNote, columns);
+      const styled = prefix + text + (lineGhost ? '\x1b[90m' + lineGhost + '\x1b[0m' : '') + (lineNote ? '\x1b[2;90m' + lineNote + '\x1b[0m' : '');
+      return { plain, styled, highlightStart, highlightEnd, cursorColumn, text, ghost: lineGhost, note: lineNote };
+    });
+    const cursorVisibleLine = Math.max(0, cursorLine - windowStart);
+    const cursorLineData = lines[cursorVisibleLine];
+    return {
+      lines,
+      cursorRow: cursorVisibleLine,
+      cursor: Math.min(columns, (cursorLineData?.cursorColumn ?? 2) + 1),
+      ghost, note,
+      plain: lines[0]?.plain ?? fit('> ', columns),
+      styled: lines[0]?.styled ?? fit('> ', columns)
+    };
+  }
+
+  settingsFieldDefs() {
+    const draft = this.settingsDraft ?? this.settings;
+    return [
+      { key: 'manager', label: 'Manager 载体', type: 'provider', value: draft.manager },
+      { key: 'managerModel', label: 'Manager 模型', type: 'text', value: draft.managerModel },
+      { key: 'managerEffort', label: 'Manager effort', type: 'text', value: draft.managerEffort },
+      { key: 'managerPrompt', label: 'Manager 提示词', type: 'text', value: draft.managerPrompt },
+      { key: 'worker', label: 'Worker 载体', type: 'provider', value: draft.worker },
+      { key: 'workerModel', label: 'Worker 模型', type: 'text', value: draft.workerModel },
+      { key: 'workerEffort', label: 'Worker effort', type: 'text', value: draft.workerEffort },
+      { key: 'workerPrompt', label: 'Worker 提示词', type: 'text', value: draft.workerPrompt },
+      { key: 'codexApprovals', label: 'Codex 审批', type: 'toggle', value: draft.codexApprovals === 'user' ? '手动审批' : '自动审批' },
+      { key: 'maxWorkers', label: '最大并发', type: 'number', value: String(draft.maxWorkers) },
+      { key: 'silenceMs', label: '静默阈值', type: 'number', value: `${Math.round(draft.silenceMs / 60_000)} 分钟` },
+      { key: 'mouseSelection', label: '鼠标拖选', type: 'toggle', value: draft.mouseSelection === 'app' ? '应用层（Ctrl+C 复制）' : '原生' },
+      { key: 'showShortcutHints', label: '快捷键提示', type: 'toggle', value: draft.showShortcutHints ? '显示' : '隐藏' }
+    ];
+  }
+  settingsFields() {
+    return this.settingsFieldDefs().map(field => [
+      field.label,
+      field.type === 'text' && this.settingsEditing === field.key ? (field.value ?? '') + '▌' : field.type === 'text' ? field.value || '（空）' : field.value
+    ]);
+  }
+  settingsView(columns, height) {
+    if (!this.settingsDraft) this.settingsDraft = { ...this.settings };
+    const fields = this.settingsFieldDefs();
+    const fieldHeight = Math.max(1, height - 3);
+    const first = Math.max(0, Math.min(this.settingsIndex - fieldHeight + 1, fields.length - fieldHeight));
+    const lines = [border('设置 · 保存后重启生效', columns)];
+    const add = text => lines.push('│ ' + fit(text, columns - 4) + ' │');
+    fields.slice(first, first + fieldHeight).forEach((field, offset) => {
+      const index = first + offset;
+      const value = field.type === 'text' && this.settingsEditing === field.key ? (field.value ?? '') + '▌' : field.type === 'text' ? field.value || '（空）' : field.value;
+      add(`${index === this.settingsIndex ? '▶' : ' '} ${fit(field.label, 18)} ${value}`);
+    });
+    add('');
+    add('↑↓ 选择 · ←→ 修改 · Enter 编辑/保存 · Ctrl+J 换行 · Ctrl+S 保存 · Esc 取消');
+    while (lines.length < height - 1) add('');
+    if (height > 0) lines.push(border('', columns, '╰', '╯'));
+    return lines.slice(0, height);
+  }
+  async saveSettings() {
+    try {
+      validateConfig(this.settingsDraft);
+      if (typeof this.options.saveSettings !== 'function') throw new Error('设置持久化不可用');
+      const saved = await this.options.saveSettings({ ...this.settingsDraft });
+      this.settings = { ...(saved ?? this.settingsDraft) };
+      this.settingsDraft = null; this.settingsEditing = null; this.panel = 'manager'; this.screen = 'manager';
+      this.notice = `设置已保存，重启 ${PRODUCT_NAME} 后生效`;
+    } catch (error) {
+      this.notice = '保存设置失败：' + error.message;
+    }
+    this.render();
+  }
+  async settingsKey(text, key = {}) {
+    if (!this.settingsDraft) this.settingsDraft = { ...this.settings };
+    const fields = this.settingsFieldDefs(), count = fields.length;
+    if (this.settingsEditing) {
+      const field = fields.find(item => item.key === this.settingsEditing);
+      if (key.ctrl && key.name === 's') { this.settingsEditing = null; return this.saveSettings(); }
+      if (key.name === 'escape') { this.settingsEditing = null; this.notice = '已取消字段编辑'; this.render(); return; }
+      if (key.name === 'return') { this.settingsEditing = null; this.notice = '字段已修改 · Ctrl+S 保存'; this.render(); return; }
+      if (key.ctrl && (key.name === 'j' || key.name === 'return')) { this.settingsDraft[field.key] = (this.settingsDraft[field.key] ?? '') + '\n'; this.render(); return; }
+      if (key.name === 'backspace') { this.settingsDraft[field.key] = Array.from(this.settingsDraft[field.key] ?? '').slice(0, -1).join(''); this.render(); return; }
+      if (text && !key.ctrl && !key.meta && !text.startsWith('\x1b')) {
+        this.settingsDraft[field.key] = (this.settingsDraft[field.key] ?? '') + clean(text).replace(/[\r\n]/g, ' ');
+        this.render();
+      }
+      return;
+    }
+    if (key.ctrl && key.name === 's') return this.saveSettings();
+    if (key.name === 'escape') {
+      this.settingsDraft = null; this.settingsEditing = null; this.panel = 'manager'; this.screen = 'manager';
+      this.notice = '已取消设置修改'; this.render(); return;
+    }
+    if (key.name === 'return') {
+      const field = fields[this.settingsIndex];
+      if (field?.type === 'text') {
+        this.settingsEditing = field.key; this.notice = `编辑 ${field.label} · Enter 完成`; this.render(); return;
+      }
+      return this.saveSettings();
+    }
+    if (['up', 'down'].includes(key.name)) {
+      this.settingsIndex = (this.settingsIndex + (key.name === 'up' ? count - 1 : 1)) % count;
+      this.render(); return;
+    }
+    if (!['left', 'right'].includes(key.name)) return;
+    const step = key.name === 'left' ? -1 : 1;
+    const field = fields[this.settingsIndex];
+    if (field.type === 'provider') {
+      const index = PROVIDERS.indexOf(this.settingsDraft[field.key]);
+      this.settingsDraft[field.key] = PROVIDERS[(index + step + PROVIDERS.length) % PROVIDERS.length];
+    } else if (field.key === 'codexApprovals') {
+      this.settingsDraft.codexApprovals = this.settingsDraft.codexApprovals === 'auto_review' ? 'user' : 'auto_review';
+    } else if (field.key === 'maxWorkers') {
+      this.settingsDraft.maxWorkers = Math.max(1, Math.min(32, Number(this.settingsDraft.maxWorkers) + step));
+    } else if (field.key === 'silenceMs') {
+      const minutes = Math.max(1, Math.min(1440, Math.round(Number(this.settingsDraft.silenceMs) / 60_000) + step));
+      this.settingsDraft.silenceMs = minutes * 60_000;
+    } else if (field.key === 'mouseSelection') {
+      this.settingsDraft.mouseSelection = this.settingsDraft.mouseSelection === 'app' ? 'native' : 'app';
+    } else if (field.key === 'showShortcutHints') {
+      this.settingsDraft.showShortcutHints = !this.settingsDraft.showShortcutHints;
+    }
+    this.notice = '';
+    this.render();
+  }
+  get scrollKey() { return `${this.panel}:${this.panel === 'manager' ? 'manager' : this.worker?.id ?? ''}:${this.panel === 'files' ? this.filePath : this.panel === 'git' ? this.diffMode : this.panel === 'request' ? this.requestId : ''}`; }
+  get scrollState() {
+    if (!this.scrollViews.has(this.scrollKey)) this.scrollViews.set(this.scrollKey, { top: null, total: 0, height: 1 });
+    return this.scrollViews.get(this.scrollKey);
+  }
+  bottomPadding() {
+    const height = this.scrollState.height;
+    return Math.min(12, Math.max(3, Math.floor(height / 3)));
+  }
+  scrollBy(delta) {
+    const state = this.scrollState, normalMax = Math.max(0, state.total - state.height);
+    const max = normalMax + this.bottomPadding();
+    const top = Math.max(0, Math.min(max, (state.top ?? normalMax) + delta));
+    state.top = delta > 0 && top === normalMax ? null : top;
+  }
+  scrollWheel(delta) {
+    this.scrollBy(delta);
+    this.scheduleRender(16);
+  }
+  scrollTo(position) { this.scrollState.top = position === 'top' ? 0 : null; }
+  clearSelection() {
+    clearInterval(this.selectionAutoTimer); this.selectionAutoTimer = null; this.selectionEdge = 0; this.selectionPointer = null;
+    this.selection = null;
+  }
+  stopSelectionAutoScroll() {
+    clearInterval(this.selectionAutoTimer); this.selectionAutoTimer = null; this.selectionEdge = 0;
+  }
+  scrollHint() {
+    const state = this.scrollState;
+    const normalMax = Math.max(0, state.total - state.height);
+    const top = Math.min(normalMax + this.bottomPadding(), state.top ?? normalMax);
+    const padding = Math.max(0, top - normalMax);
+    return `${state.total ? Math.min(state.total, top + 1) : 0}–${Math.min(state.total, top + state.height)}/${state.total}${padding ? ` · 底部留白 ${padding} 行` : ''} · ${state.top === null ? '跟随最新' : '历史 · End 回到底部'}`;
+  }
+  foldDetails(expand, number = 'all') {
+    const actor = this.conversationActor;
+    if (!actor) throw new Error('请先打开 Manager 或 worker 对话。');
+    const groups = conversationGroups(this.visibleConversationEvents(actor)).filter(group => group.kind === 'background');
+    if (number === 'all' || !number) {
+      if (expand) this.expandedActors.add(actor); else this.expandedActors.delete(actor);
+      for (const keys of [this.expandedGroups, this.collapsedGroups]) for (const key of keys) if (key.startsWith(actor + ':')) keys.delete(key);
+    } else {
+      const group = /^[1-9]\d*$/.test(number) ? groups[Number(number) - 1] : undefined;
+      if (!group) throw new Error('后台过程组号不存在；使用 /expand all 或 /collapse all。');
+      const key = actor + ':' + group.id;
+      if (expand) { this.expandedGroups.add(key); this.collapsedGroups.delete(key); }
+      else { this.collapsedGroups.add(key); this.expandedGroups.delete(key); }
+    }
+    this.conversationCache.clear();
+  }
+  scheduleRender(delay = 50) {
+    if (this.stopped || (this.renderTimer && delay >= this.renderDelay)) return;
+    clearTimeout(this.renderTimer);
+    this.renderDelay = delay;
+    this.renderTimer = setTimeout(() => { this.renderTimer = null; this.renderDelay = 50; this.render(); }, delay);
+  }
+  async showPanel(panel) {
+    this.panel = panel; this.screen = panel === 'manager' ? 'manager' : 'workers';
+    if (panel === 'manager') this.showArchivedOnce = false;
+    if (this.screen === 'workers') this.workerPanel = panel;
+    await this.refresh();
+  }
+  async switchScreen() {
+    await this.showPanel(this.screen === 'manager' ? this.workerPanel : 'manager');
+  }
+  async switchProject(selector) {
+    if (typeof this.service.switchProject !== 'function') throw new Error('This session supports only one project');
+    const project = await this.service.switchProject(selector);
+    this.settings = { ...DEFAULT_CONFIG, ...this.service.config };
+    this.selected = 0; this.showArchivedOnce = false;
+    this.history = []; this.historyIndex = 0; this.historyDraft = '';
+    this.scrollViews.clear(); this.expandedActors.clear(); this.expandedGroups.clear(); this.collapsedGroups.clear();
+    this.conversationCache.clear();
+    const active = (this.service.projects ?? []).findIndex(item => item.active);
+    this.projectScroll = Math.max(0, Math.min(active - 1, (this.service.projects?.length ?? 1) - 3));
+    this.panel = 'manager'; this.screen = 'manager';
+    this.notice = `当前项目 -[${project.code}] ${project.root}`;
+    this.render();
+  }
+  async quoteMessage(args) {
+    const match = /^(?:([^:\s]+):)?#?(\d+)\s+([\s\S]+)$/.exec(String(args ?? '').trim());
+    if (!match) throw new Error('Usage: /quote [actor:]#seq 指令');
+    const actor = match[1] || (this.screen === 'workers' && this.worker ? this.worker.id : 'manager');
+    const seq = Number(match[2]);
+    const instruction = match[3].trim();
+    if (!instruction) throw new Error('Usage: /quote [actor:]#seq 指令');
+    const event = await this.service.conversationEvent(actor, seq);
+    if (!event) throw new Error(`No event #${seq} for ${actor}`);
+    const text = String(eventContent(event)).trim();
+    if (!text) throw new Error('Quoted event has no text content');
+    const project = (this.service.projects ?? []).find(item => item.active)?.code ?? '';
+    const role = event.data.role ?? event.type;
+    const quote = { project, actor, seq, role, time: event.time, text };
+    const quoted = text.split('\n').map(line => '> ' + line).join('\n');
+    const message = `> 引用 ${actor} · #${seq} · ${role}${event.time ? ' · ' + event.time : ''}\n${quoted}\n\n${instruction}`;
+    await this.service.sendManagerMessage(message, false, [quote]);
+    this.panel = 'manager'; this.screen = 'manager';
+    this.notice = `已引用 ${actor} #${seq} 并发送给 Manager`;
+    this.scrollTo('bottom'); this.render();
+  }
+  navigateHistory(direction) {
+    if (!this.history.length) return;
+    if (this.historyIndex >= this.history.length) this.historyDraft = this.input;
+    this.historyIndex = Math.max(0, Math.min(this.history.length, this.historyIndex + direction));
+    this.input = this.historyIndex === this.history.length ? this.historyDraft : this.history[this.historyIndex];
+    this.notice = '';
+  }
+  async key(text, key = {}) {
+    if (this.stopped) return;
+    if ((key.meta || key.alt) && ['up', 'down'].includes(key.name)) {
+      const count = this.service.projects?.length ?? 1;
+      this.projectScroll = Math.max(0, Math.min(this.projectScroll + (key.name === 'up' ? -1 : 1), Math.max(0, count - 3)));
+      this.render(); return;
+    }
+    if (key.ctrl && key.name === 'tab') {
+      await this.switchScreen();
+      this.render();
+      return;
+    }
+    if (key.ctrl && key.name === 'a' && this.panel !== 'settings') {
+      this.clearSelection();
+      if (this.input) {
+        this.inputSelection = { anchor: 0, focus: this.inputCharacters.length };
+        this.cursor = this.inputCharacters.length;
+        this.notice = '已全选输入框内容';
+      }
+      this.render();
+      return;
+    }
+    if (key.ctrl && key.name === 'q') {
+      const mouseSelected = this.settings.mouseSelection === 'app' ? filterSelection(this.selectedText()) : '';
+      const selected = mouseSelected || this.selectedInputText();
+      if (selected) {
+        this.insertInput(selected.split('\n').map(line => '> ' + line).join('\n') + '\n\n');
+        this.clearSelection(); this.clearInputSelection();
+        this.notice = '已插入引用，输入要补充的消息后按 Enter 发送';
+        this.historyIndex = this.history.length; this.historyDraft = '';
+        this.render();
+      } else {
+        this.notice = '先选择 Manager/Worker 历史文本，再按 Ctrl+Q 引用';
+        this.render();
+      }
+      return;
+    }
+    if (key.ctrl && key.name === 'c') {
+      const mouseSelected = this.settings.mouseSelection === 'app' ? filterSelection(this.selectedText()) : '';
+      const inputSelected = this.selectedInputText();
+      const selected = mouseSelected || inputSelected;
+      if (selected) {
+        try {
+          await (this.options.copyText ?? copyText)(selected);
+          this.notice = `已复制选区 · ${Array.from(selected).length} 字符`;
+          this.clearSelection();
+          this.clearInputSelection();
+        } catch (error) {
+          this.notice = `复制选区失败：${error.message}`;
+        }
+        this.render();
+        return;
+      }
+      this.notice = 'Ctrl+C 不退出 TUI；使用 /quit 或 Ctrl+D 退出';
+      this.render();
+      return;
+    }
+    if (key.ctrl && key.name === 'd') return this.options.quit();
+    if (key.ctrl && key.name === 'v' && this.panel !== 'settings') {
+      this.clearSelection();
+      try {
+        const value = clean(await (this.options.readClipboard ?? readClipboard)()).replace(/\r\n?/g, '\n');
+        this.insertInput(value); this.historyIndex = this.history.length; this.historyDraft = '';
+        this.notice = value ? '已粘贴剪贴板内容' : '剪贴板为空';
+      } catch (error) {
+        this.notice = `粘贴失败：${error.message}`;
+      }
+      this.render();
+      return;
+    }
+    const preserveSelection = ((key.shift || key.ctrl) && ['up', 'down'].includes(key.name))
+      || (['up', 'down'].includes(key.name) && ((this.screen === 'workers' && this.workerFocus === 'detail') || ['files', 'git'].includes(this.panel)))
+      || ['pageup', 'pagedown'].includes(key.name);
+    if (!preserveSelection) this.clearSelection();
+    if (this.panel === 'settings') return this.settingsKey(text, key);
+    const completion = this.completion;
+    if (key.name === 'escape' && completion.active) { this.dismissedCompletion = this.input; this.render(); return; }
+    if (key.name === 'escape' && (this.screen === 'workers' || ['help', 'request'].includes(this.panel))) {
+      await this.showPanel('manager');
+      this.render();
+      return;
+    }
+    if (key.shift && key.name === 'return') { this.insertNewline(); return; }
+    if (completion.open && ['up', 'down'].includes(key.name) && !key.ctrl && !key.shift && this.historyIndex >= this.history.length) {
+      this.completionIndex = (this.completionIndex + (key.name === 'up' ? completion.items.length - 1 : 1)) % completion.items.length;
+      this.completionNavigated = true; this.render(); return;
+    }
+    if (completion.open && key.name === 'tab' && !key.shift) { await this.fillCompletion(); return; }
+    if (key.name === 'return') {
+      if (this.submitPending) return;
+      await this.submitInput();
+    } else if (key.name === 'backspace') { this.backspaceInput(); this.notice = ''; this.historyIndex = this.history.length; this.historyDraft = ''; }
+    else if (key.name === 'delete') { this.deleteInput(); this.notice = ''; this.historyIndex = this.history.length; this.historyDraft = ''; }
+    else if (key.ctrl && key.name === 'u') { this.setInput('', 0); this.notice = ''; this.historyIndex = this.history.length; this.historyDraft = ''; }
+    else if (key.name === 'home' && !key.ctrl) {
+      if (key.shift) this.moveInputCursor(-this.cursor, true);
+      else { this.cursor = 0; this.clearInputSelection(); }
+    }
+    else if (key.name === 'end' && !key.ctrl) {
+      if (key.shift) this.moveInputCursor(this.inputCharacters.length - this.cursor, true);
+      else { this.cursor = this.inputCharacters.length; this.clearInputSelection(); }
+    }
+    else if (this.input && key.name === 'left') { this.moveInputCursor(-1, key.shift); }
+    else if (this.input && key.name === 'right') { this.moveInputCursor(1, key.shift); }
+    else if (key.name === 'f5' && this.conversationActor) this.foldDetails(!this.expandedActors.has(this.conversationActor));
+    else if (key.name === 'f6' && this.screen === 'workers' && ['chat', 'files', 'git'].includes(this.panel)) this.workerFocus = this.workerFocus === 'list' ? 'detail' : 'list';
+    else if (/^f[1-4]$/.test(key.name)) await this.showPanel(['manager', 'chat', 'files', 'git'][Number(key.name.slice(1)) - 1]);
+    else if (['left', 'right'].includes(key.name) && !this.input && ['chat', 'files', 'git'].includes(this.panel)) {
+      const panels = ['chat', 'files', 'git'];
+      await this.showPanel(panels[(panels.indexOf(this.panel) + (key.name === 'left' ? 2 : 1)) % panels.length]);
+    } else if (['up', 'down'].includes(key.name)) {
+      if (key.ctrl && !key.shift) this.scrollBy(key.name === 'up' ? -1 : 1);
+      else if (key.shift && !key.ctrl) this.scrollTo(key.name === 'up' ? 'top' : 'bottom');
+      else if (this.screen === 'manager' && this.panel === 'manager') this.navigateHistory(key.name === 'up' ? -1 : 1);
+      else if (this.screen === 'workers' && this.workerFocus === 'list' && !key.ctrl && !this.input && ['chat', 'files', 'git'].includes(this.panel)) {
+        this.selected = Math.max(0, Math.min(this.workers.length - 1, this.selected + (key.name === 'up' ? -1 : 1))); this.filePath = ''; await this.refresh();
+      } else this.scrollBy(key.name === 'up' ? -1 : 1);
+    } else if (key.name === 'pageup') this.scrollBy(-Math.max(1, this.scrollState.height - 1));
+    else if (key.name === 'pagedown') this.scrollBy(Math.max(1, this.scrollState.height - 1));
+    else if (key.ctrl && key.name === 'p') this.navigateHistory(-1);
+    else if (key.ctrl && key.name === 'n') this.navigateHistory(1);
+    else if (text && !key.ctrl && !key.meta && !text.startsWith('\x1b')) { this.insertInput(text); this.notice = ''; this.historyIndex = this.history.length; this.historyDraft = ''; }
+    this.render();
+    await this.loadCompletionFiles();
+    await this.loadSkillCompletions();
+  }
+  async submitInput() {
+    if (this.submitPending) return;
+    const command = this.input.trim();
+    if (!command) return;
+    const submittedAt = Date.now();
+    if (command === this.lastSubmittedText && submittedAt - this.lastSubmittedAt < 250) return;
+    this.submitPending = true;
+    this.lastSubmittedText = command; this.lastSubmittedAt = submittedAt;
+    this.setInput('', 0);
+    this.history.push(command); this.historyIndex = this.history.length; this.historyDraft = '';
+    try { await this.command(command); }
+    catch (error) { this.notice = error.message; }
+    finally { this.submitPending = false; this.render(); }
+  }
+  async command(text) {
+    this.notice = '';
+    if (!text.startsWith('/')) {
+      const routed = this.service.routeInput?.(text);
+      if (routed?.project) {
+        await this.switchProject(routed.project);
+        if (routed.text) {
+          const attachments = this.options.takeAttachments?.() ?? [];
+          await this.service.sendManagerMessage(routed.text, false, [], attachments);
+        }
+        return;
+      }
+      if (this.panel === 'manager') this.scrollTo('bottom');
+      const attachments = this.options.takeAttachments?.() ?? [];
+      await this.service.sendManagerMessage(text, false, [], attachments);
+      return;
+    }
+    const [command, ...parts] = text.slice(1).split(' '); const args = parts.join(' ').trim();
+    if (command === 'quit') return this.options.quit();
+    if (command === 'shutdown') {
+      await this.service.shutdown();
+      return this.options.quit();
+    }
+    if (command === 'reload') {
+      if (typeof this.options.reload !== 'function') throw new Error('重启功能不可用');
+      this.notice = `正在重启 ${PRODUCT_NAME}…`; this.render();
+      await this.options.reload(); return;
+    }
+    if (command === 'interrupt') {
+      if (args) return this.service.sendManagerMessage(args, true);
+      const result = await this.service.interruptManager();
+      this.notice = result.interrupted ? '已停止 Manager 当前工作；发送下一条消息后继续' : 'Manager 当前没有正在执行的工作';
+      this.render(); return;
+    }
+    if (command === 'memory') {
+      const action = args.trim();
+      if (action === 'clear') {
+        const result = await this.service.clearManagerMemory();
+        this.notice = result.cleared
+          ? '已为 Manager 开启新的原生会话；工作规范、AGENTS 和任务状态仍保留'
+          : 'Manager 当前已使用新的原生会话';
+      } else if (!action || action === 'status') {
+        const sessionId = this.service.state.manager?.sessionId;
+        this.notice = sessionId
+          ? `Manager native thread: ${sessionId} · /memory clear 可清空`
+          : 'Manager 当前使用新的 native 对话 thread';
+      } else {
+        throw new Error('Usage: /memory status|clear');
+      }
+      this.render(); return;
+    }
+    if (command === 'skills') {
+      const actor = args || 'manager';
+      const result = await this.service.listSkills(actor, true);
+      const entries = result.skills?.data ?? result.data ?? [];
+      const skills = entries.flatMap(entry => entry.skills ?? []);
+      const errors = entries.flatMap(entry => entry.errors ?? []);
+      this.previewVersion++; this.panel = 'help'; this.scrollTo('top');
+      this.preview = [
+        `Skills for ${actor}`,
+        '',
+        ...(skills.length ? skills.map(skill => `${skill.enabled === false ? '[disabled] ' : ''}$${skill.name} · ${skill.scope ?? ''}\n  ${skill.description}\n  ${skill.path}`) : ['No skills discovered.']),
+        ...(errors.length ? ['', 'Discovery errors:', ...errors.map(error => JSON.stringify(error))] : [])
+      ].join('\n');
+      return;
+    }
+    if (command === 'checkpoint') {
+      const checkpoint = await this.service.createCheckpoint(args);
+      this.notice = `Checkpoint ${checkpoint.id} · ${checkpoint.label}`;
+      this.render(); return;
+    }
+    if (command === 'checkpoints') {
+      const checkpoints = await this.service.listCheckpoints();
+      this.notice = checkpoints.length
+        ? checkpoints.map(cp => `${cp.id} · ${cp.label}`).slice(-4).join(' | ')
+        : 'No checkpoints';
+      this.render(); return;
+    }
+    if (command === 'turns') {
+      const actor = args || this.conversationActor || 'manager';
+      const page = await this.service.conversationTurns(actor, 20);
+      const turns = page?.data ?? page?.turns?.data ?? [];
+      this.notice = turns.length
+        ? turns.slice(0, 5).map(turn => `${turn.id} · ${turn.status ?? ''}`).join(' | ')
+        : `No native turns for ${actor}`;
+      this.render(); return;
+    }
+    if (command === 'fork') {
+      const [turnId, requestedActor] = parts;
+      if (!turnId) throw new Error('Usage: /fork turn_id [manager|worker_id]');
+      const actor = requestedActor || this.conversationActor || 'manager';
+      const thread = await this.service.forkConversation(actor, { lastTurnId: turnId });
+      this.notice = `Forked ${actor} · ${thread?.id ?? thread?.thread?.id ?? 'new thread'}`;
+      this.render(); return;
+    }
+    if (command === 'revert') {
+      const [turnId, ...rest] = parts;
+      if (!turnId || !rest.includes('--yes')) throw new Error('Usage: /revert turn_id --yes [manager|worker_id]. This changes conversation history only.');
+      const actor = rest.find(item => item !== '--yes') || this.conversationActor || 'manager';
+      await this.service.revertConversation(actor, turnId);
+      this.notice = `Reverted ${actor} before native turn ${turnId}`;
+      this.render(); return;
+    }
+    if (command === 'restore') {
+      const [checkpointId, ...options] = parts;
+      if (!checkpointId) throw new Error('Usage: /restore checkpoint_id [files|conversation|all] confirm');
+      const mode = options.find(item => ['files', 'conversation', 'all'].includes(item)) || 'all';
+      if (!options.includes('confirm')) {
+        this.notice = `Restore ${checkpointId} (${mode}) changes Last Order-managed state. Re-run with confirm.`;
+        this.render(); return;
+      }
+      const result = await this.service.restoreCheckpoint(checkpointId, {
+        files: mode !== 'conversation', conversation: mode !== 'files'
+      });
+      this.notice = `Restored ${checkpointId} · files=${result.restoredFiles.join(',') || '-'} · conversations=${result.forkedConversations.join(',') || '-'}`;
+      this.render(); return;
+    }
+    if (command === 'expand' || command === 'collapse') return this.foldDetails(command === 'expand', args || 'all');
+    if (command === 'settings') {
+      this.panel = 'settings'; this.screen = 'manager'; this.settingsDraft = { ...this.settings }; this.settingsIndex = 0; this.settingsEditing = null;
+      this.notice = `设置保存后需重启 ${PRODUCT_NAME} 生效`; this.render(); return;
+    }
+    if (command === 'monitor') {
+      const requested = args || this.worker?.id;
+      const worker = requested && this.workers.find(item => item.id === requested || item.id.startsWith(requested));
+      if (!worker) throw new Error('请选择 worker 或提供有效的 worker_id');
+      if (typeof this.options.openMonitor !== 'function') throw new Error('独立监视窗口不可用');
+      const pid = await this.options.openMonitor(worker);
+      this.notice = `已在独立窗口打开 ${worker.id} 监视${pid ? ' · PID ' + pid : ''}`;
+      return;
+    }
+    if (command === 'help') {
+      this.previewVersion++; this.panel = 'help'; this.scrollTo('top');
+      this.preview = [
+        '/ 在输入框内显示浅色补全；↑↓ 切候选，Tab 填入，Esc 收起',
+        '补全仅填入文本；Enter 发送，Shift+Enter 在输入框内换行。',
+        'F5: 展开 / 折叠当前对话的全部后台过程',
+        '/monitor [worker_id]: 在独立窗口监视 worker',
+        '/settings: 配置 staff provider/model/effort 等；Ctrl+S 保存，重启生效',
+        `/reload: 快速重启 ${PRODUCT_NAME}，应用最新配置`,
+        '/expand 组号 或 /collapse 组号: 展开 / 折叠一组',
+        '/expand all 或 /collapse all: 展开 / 折叠全部',
+        'Ctrl+Tab: Manager 与 Workers 两个主界面切换',
+        'Workers: 左侧列表 + 右侧详情；窄终端上下排列',
+        'Manager ↑↓: 历史输入；Ctrl+↑↓: 逐行滚动对话',
+        'Workers F6: 切换列表 / 详情焦点；↑↓: 选择 worker 或滚动详情',
+        'Ctrl+↑↓ / PgUp / PgDn: 逐行或翻页滚动；Shift+↑: 顶部；Shift+↓: 底部',
+        '输入框 ←→: 移动光标；Home / End: 行首 / 行尾',
+        'Shift+←→: 选择输入内容；Ctrl+A: 全选；输入/Delete 替换选区',
+        '/memory status: 查看 Manager native thread；/memory clear: 清空记忆并开启新的原生会话',
+        '/skills [actor]: 列出 Codex 可见 skills；在消息中输入 $skill-name 可显式调用',
+        '/archive [worker_id]: 手动归档已停止 worker；/workers all 一次性查看归档项',
+        '输入为空时 ←→: 切换对话 / 工作区 / Git；Ctrl+Home / Ctrl+End: 滚动内容',
+        'F1: Manager；F2: Worker 对话；F3: 工作区；F4: Git',
+        '/manager 或 /workers: 直接进入主界面',
+        'Enter: 发送给 manager；Shift+Enter: 换行', '/interrupt [消息]: 停止 manager 当前工作；带消息时优先处理新消息',
+        '/w: 打开 Workers 界面',
+        '/msg worker_id 消息: 向指定 worker 发消息，操作同步给 manager',
+        '/pause /resume /cancel /retry: 控制选中的 worker',
+        '/select worker_id: 按 ID 选中 worker 并打开详情',
+        '/approval ID: 查看完整审批请求', '/approve ID 或 /deny ID: 批准或拒绝',
+        '/question ID: 查看完整问题', '/answer ID 答复: 回答问题',
+        '/open 相对路径: 查看文件或目录', '/back: 上一级目录',
+        '/diff task 或 /diff uncommitted: 切换 Git 比较范围', '/refresh: 刷新工作区或 Git',
+        '鼠标拖选: native 由终端处理；app 模式支持滚动跟随、拖到边缘自动滚动，Ctrl+C 复制并过滤边框',
+        'PgUp/PgDn: 滚动详情', 'Ctrl+P / Ctrl+N: 历史输入前后切换', 'Ctrl+U: 清空输入',
+        'Ctrl+C: 应用模式有选区时复制；无选区不退出 TUI。Ctrl+Q: 将选中文本插入为引用。Ctrl+V: 粘贴剪贴板',
+        '/checkpoint [名称]: 创建当前 workspace 与原生会话 checkpoint',
+        '/checkpoints: 查看 checkpoint 列表',
+        '/turns [actor]: 查看原生会话 turns',
+        '/version: 查看 Last Order、Mission Control、provider 与平台版本',
+        '/quote [actor:]#seq 指令: 引用 Manager 或 Worker 历史消息并发送给 Manager',
+        '/fork turn_id [actor]: 从原生 turn fork 对话',
+        '/revert turn_id --yes [actor]: 删除 turn 及后续历史，不改文件',
+        '/restore id [files|conversation|all] confirm: 恢复 checkpoint',
+        '/quit: 只退出 TUI，后台任务继续运行',
+        '/shutdown: 关闭 Last Order 和后台任务；Ctrl+C 始终不退出，Ctrl+D 或 /quit 退出 TUI'
+      ].join('\n'); return;
+    }
+    if (command === 'version') {
+      if (args) throw new Error('Usage: /version');
+      const info = this.service.client?.info ?? this.service.info ?? {};
+      const staff = role => [
+        this.settings[role],
+        this.settings[role + 'Model'],
+        this.settings[role + 'Effort']
+      ].filter(Boolean).join(' / ') || '-';
+      this.previewVersion++; this.panel = 'help'; this.scrollTo('top');
+      this.preview = [
+        `${PRODUCT_NAME}: ${info.version ?? APP_VERSION}`,
+        `Mission Control: protocol ${info.protocol ?? CONTROL_PROTOCOL_VERSION} · PID ${info.pid ?? '-'} · started ${info.started_at ?? '-'}`,
+        `Manager: ${staff('manager')}`,
+        `Worker: ${staff('worker')}`,
+        `Platform: ${process.platform} ${process.arch} · Node ${process.version}`,
+        `Project: ${info.project_root ?? this.service.git?.root ?? '-'}`,
+        ...(process.env.LO_CODEX_COMMAND ? [`Codex CLI override: ${process.env.LO_CODEX_COMMAND}`] : [])
+      ].join('\n');
+      return;
+    }
+    if (command === 'approval' || command === 'question') {
+      const item = (command === 'approval' ? this.service.approvals : this.service.questions).get(args);
+      if (!item) throw new Error('Request is no longer pending');
+      this.previewVersion++; this.panel = 'request'; this.requestId = args; this.scrollTo('top'); this.preview = `${command} ${args} [${item.actor}]\n${JSON.stringify(item.detail, null, 2)}\n\n${command === 'approval' ? '/approve ID 或 /deny ID' : '/answer ID 答复'}`; return;
+    }
+    if (command === 'approve' || command === 'deny') { this.service.respondApproval(args, command === 'approve'); return; }
+    if (command === 'answer') { const [questionId, ...answer] = parts; this.service.answerQuestion(questionId, answer.join(' ')); return; }
+    if (command === 'manager') return this.showPanel('manager');
+    if (command === 'workers') {
+      this.showArchivedOnce = args.trim() === 'all';
+      return this.showPanel(this.workerPanel);
+    }
+    if (command === 'w') {
+      if (args) throw new Error('Usage: /w');
+      return this.showPanel(this.workerPanel);
+    }
+    if (command === 'msg') {
+      const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(args);
+      if (!match || !match[2]?.trim()) throw new Error('Usage: /msg worker_id message');
+      const workerRef = match[1];
+      const exact = this.allWorkers.find(worker => worker.id === workerRef);
+      const matches = exact ? [exact] : this.allWorkers.filter(worker => worker.id.startsWith(workerRef));
+      if (!matches.length) throw new Error('Unknown worker');
+      if (matches.length > 1) throw new Error('Ambiguous worker id');
+      return this.service.sendWorkerMessage(matches[0].id, match[2].trim());
+    }
+    if (command === 'quote') {
+      await this.quoteMessage(args);
+      return;
+    }
+    if (command === 'archive') {
+      if (this.screen !== 'workers') throw new Error('/archive is only available in the Workers view');
+      if (args.trim() === 'all') {
+        const targets = this.allWorkers.filter(worker => !worker.archivedAt && ARCHIVABLE_WORKER_STATUSES.has(worker.status));
+        for (const worker of targets) await this.service.archiveWorker(worker.id, 'archive-all');
+        this.notice = targets.length ? `已归档 ${targets.length} 个停止的 worker` : '没有可归档的停止 worker';
+        this.selected = Math.max(0, Math.min(this.selected, this.workers.length - 1));
+        this.render();
+        return;
+      }
+      const target = args ? this.allWorkers.find(worker => worker.id === args || worker.id.startsWith(args)) : this.worker;
+      if (!target) throw new Error('Unknown worker');
+      const result = await this.service.archiveWorker(target.id);
+      this.notice = `Worker ${target.id} 已归档${result.already_archived ? '（此前已归档）' : ''}`;
+      this.selected = Math.max(0, Math.min(this.selected, this.workers.length - 1));
+      this.render();
+      return;
+    }
+    if (command === 'select') { const index = this.workers.findIndex(w => w.id === args || w.id.startsWith(args)); if (index < 0) throw new Error('Unknown worker'); this.selected = index; this.filePath = ''; return this.showPanel(this.workerPanel); }
+    if (command === 'refresh') return this.refresh();
+    if (!this.worker) throw new Error('Select a worker first');
+    if (['pause', 'resume', 'cancel', 'retry'].includes(command)) return this.service.controlWorker(this.worker.id, command, args);
+    if (command === 'open') { this.filePath = args; return this.showPanel('files'); }
+    if (command === 'back') { this.filePath = this.filePath ? path.dirname(this.filePath) : ''; if (this.filePath === '.') this.filePath = ''; return this.showPanel('files'); }
+    if (command === 'diff') { if (!['task', 'uncommitted'].includes(args)) throw new Error('Use /diff task or /diff uncommitted'); this.diffMode = args; return this.showPanel('git'); }
+    throw new Error('Unknown command. Type /help');
+  }
+  screenPoint(event) {
+    return {
+      row: Math.max(0, Math.min(this.lastFrameLines.length - 1, event.y - 1)),
+      col: Math.max(0, Math.min(this.lastSize.columns - 1, event.x - 1))
+    };
+  }
+  contentPoint(event, clamp = false) {
+    const view = this.lastConversationView;
+    if (!view?.lines?.length) return null;
+    const row = event.y - 1, col = event.x - 1;
+    if (!clamp && (row < view.rowStart || row >= view.rowStart + view.height || col < view.colStart || col > view.colEnd)) return null;
+    const screenRow = Math.max(view.rowStart, Math.min(view.rowStart + view.height - 1, row));
+    return { contentRow: view.top + screenRow - view.rowStart, col: Math.max(0, Math.min(view.colEnd - view.colStart, col - view.colStart)) };
+  }
+  contentRange() {
+    if (this.selection?.kind !== 'content') return null;
+    const { anchor, focus } = this.selection;
+    return anchor.contentRow < focus.contentRow || (anchor.contentRow === focus.contentRow && anchor.col <= focus.col)
+      ? { start: anchor, end: focus }
+      : { start: focus, end: anchor };
+  }
+  selectionRange() {
+    if (!this.selection || this.selection.kind === 'screen') {
+      if (!this.selection) return null;
+      const { anchor, focus } = this.selection;
+      return anchor.row < focus.row || (anchor.row === focus.row && anchor.col <= focus.col)
+        ? { start: anchor, end: focus }
+        : { start: focus, end: anchor };
+    }
+    const view = this.lastConversationView, range = this.contentRange();
+    if (!view || view.actor !== this.selection.actor || !range) return null;
+    const first = Math.max(range.start.contentRow, view.top);
+    const last = Math.min(range.end.contentRow, view.top + view.height - 1);
+    if (first > last) return null;
+    return {
+      start: {
+        row: view.rowStart + first - view.top,
+        col: view.colStart + (range.start.contentRow === first ? range.start.col : 0)
+      },
+      end: {
+        row: view.rowStart + last - view.top,
+        col: view.colStart + (range.end.contentRow === last ? range.end.col : view.colEnd - view.colStart)
+      }
+    };
+  }
+  selectedText() {
+    if (!this.selection) return '';
+    if (this.selection.kind === 'content') {
+      const range = this.contentRange();
+      if (!range) return '';
+      return this.selection.lines.slice(range.start.contentRow, range.end.contentRow + 1).map((line, index) => {
+        const contentRow = range.start.contentRow + index;
+        const start = contentRow === range.start.contentRow ? range.start.col : 0;
+        const end = contentRow === range.end.contentRow ? range.end.col + 1 : Number.MAX_SAFE_INTEGER;
+        return sliceColumns(line, start, end).trimEnd();
+      }).join('\n').replace(/\n+$/, '');
+    }
+    const range = this.selectionRange();
+    return this.lastFrameLines.slice(range.start.row, range.end.row + 1).map((line, index) => {
+      const row = range.start.row + index;
+      const start = row === range.start.row ? range.start.col : 0;
+      const end = row === range.end.row ? range.end.col + 1 : Number.MAX_SAFE_INTEGER;
+      return sliceColumns(line, start, end).trimEnd();
+    }).join('\n').replace(/\n+$/, '');
+  }
+  updateSelectionEdge(event) {
+    if (this.selection?.kind !== 'content' || !this.selection.dragging || !this.lastConversationView) {
+      this.stopSelectionAutoScroll(); return;
+    }
+    const view = this.lastConversationView, row = event.y - 1;
+    const edge = row <= view.rowStart ? -1 : row >= view.rowStart + view.height - 1 ? 1 : 0;
+    if (!edge) { this.stopSelectionAutoScroll(); return; }
+    if (this.selectionAutoTimer) return;
+    this.selectionEdge = edge;
+    this.selectionAutoTimer = setInterval(() => {
+      if (!this.selection?.dragging || !this.selectionEdge || !this.lastConversationView) return this.stopSelectionAutoScroll();
+      const state = this.scrollState, before = state.top ?? Math.max(0, state.total - state.height);
+      this.scrollBy(this.selectionEdge);
+      const after = state.top ?? Math.max(0, state.total - state.height);
+      if (after === before) return this.stopSelectionAutoScroll();
+      const view = this.lastConversationView;
+      view.top = after;
+      const point = this.contentPoint(this.selectionPointer, true);
+      if (point) this.selection.focus = point;
+      this.render();
+    }, 80);
+  }
+  async handleMouse(event) {
+    if (this.settings.mouseSelection !== 'app' || event.shift) return;
+    if (event.type === 'down') {
+      if (event.button !== 0) return;
+      this.clearSelection();
+      const point = this.contentPoint(event);
+      this.selectionPointer = { x: event.x, y: event.y };
+      this.selection = point && this.lastConversationView
+        ? { kind: 'content', actor: this.lastConversationView.actor, lines: this.lastConversationView.lines.slice(), anchor: point, focus: point, dragging: true }
+        : { kind: 'screen', anchor: this.screenPoint(event), focus: this.screenPoint(event), dragging: true };
+      this.scheduleRender(16);
+      return;
+    }
+    if (!this.selection?.dragging) return;
+    if (event.type === 'drag') {
+      this.selectionPointer = { x: event.x, y: event.y };
+      this.selection.focus = this.selection.kind === 'content' ? this.contentPoint(event, true) : this.screenPoint(event);
+      this.updateSelectionEdge(event);
+      this.scheduleRender(16);
+      return;
+    }
+    if (event.type !== 'up') return;
+    this.stopSelectionAutoScroll();
+    if (this.selection.kind === 'content') {
+      const point = this.contentPoint(event, true);
+      if (point) this.selection.focus = point;
+    } else this.selection.focus = this.screenPoint(event);
+    this.selection.dragging = false;
+    const text = filterSelection(this.selectedText());
+    if (!text) { this.clearSelection(); this.scheduleRender(16); return; }
+    this.notice = `已选择 ${Array.from(text).length} 字符 · Ctrl+C 复制 · Esc 清除`;
+    this.render();
+  }
+  async refresh() {
+    const worker = this.worker, panel = this.panel, version = ++this.previewVersion;
+    if (!['files', 'git'].includes(panel)) return;
+    if (!worker?.workspace) { this.preview = '工作区尚未创建。'; return; }
+    this.preview = '正在加载…';
+    try {
+      const output = panel === 'git' ? await this.service.git.diff(worker, this.diffMode) : await this.service.git.files(worker, this.filePath);
+      if (this.worker?.id !== worker.id || this.panel !== panel || this.previewVersion !== version) return;
+      this.preview = Array.isArray(output) ? `Workspace: ${worker.workspace}\nPath: ${this.filePath || '.'}\n\n${output.map(e => (e.directory ? '[dir] ' : e.symlink ? '[link] ' : '      ') + e.name).join('\n')}\n\n/open relative/path 查看文件或目录` : output;
+    } catch (error) { if (this.previewVersion === version && this.panel === panel) this.preview = error.message; }
+  }
+  visibleConversationEvents(actor) {
+    if (!actor) return [];
+    const manager = this.service.state.manager;
+    const active = new Set(manager.active ?? []);
+    const queued = new Set((manager.pending ?? [])
+      .filter(item => item.queued && !active.has(item.id))
+      .map(item => item.id));
+    let events = this.service.store.history(actor).filter(event =>
+      !(event.type === 'manager_input' && event.data.queued && queued.has(event.data.messageId))
+    );
+    if (actor === 'manager') {
+      const memoryEpoch = manager.memoryEpoch ?? 0;
+      events = events.filter(event => {
+        if ((event.data.memoryEpoch ?? 0) !== memoryEpoch) return false;
+        if (event.type === 'manager_input') return true;
+        if (event.type !== 'message') return false;
+        if (['question', 'error', 'warning'].includes(event.data.role)) return true;
+        if (event.data.background) return event.data.role === 'assistant';
+        return ['user', 'assistant'].includes(event.data.role);
+      });
+    }
+    return events;
+  }
+  conversation(actor, columns) {
+    if (!actor) return [];
+    const manager = this.service.state.manager;
+    const events = this.visibleConversationEvents(actor);
+    const expandedActors = [...this.expandedActors].join(',');
+    const expandedGroups = [...this.expandedGroups].join(',');
+    const collapsedGroups = [...this.collapsedGroups].join(',');
+    const signature = [
+      actor, columns, events.length, events.at(-1)?.seq ?? 0,
+      events.at(-1)?.data?.streaming ? events.at(-1)?.data?.text?.length ?? 0 : '',
+      manager.memoryEpoch ?? 0,
+      (manager.active ?? []).join(','),
+      (manager.pending ?? []).map(item => `${item.id}:${item.queued ? 1 : 0}`).join(','),
+      expandedActors, expandedGroups, collapsedGroups
+    ].join('|');
+    const cacheKey = actor + ':' + columns, cached = this.conversationCache.get(cacheKey);
+    if (cached?.signature === signature) return cached.lines;
+    const lines = renderConversation(events, actor, columns, {
+      expandedActors: this.expandedActors,
+      expandedGroups: this.expandedGroups,
+      collapsedGroups: this.collapsedGroups
+    });
+    this.conversationCache.set(cacheKey, { signature, lines });
+    while (this.conversationCache.size > 8) this.conversationCache.delete(this.conversationCache.keys().next().value);
+    return lines;
+  }
+  queuedMessageLines(state, columns, limit = 5) {
+    if (!state.managerBusy && !state.manager.hold) return [];
+    const active = new Set(state.manager.active ?? []);
+    const messages = (state.manager.pending ?? []).filter(item => item.queued && !active.has(item.id));
+    if (!messages.length) return [];
+    const shown = messages.slice(0, Math.max(1, limit));
+    const lines = [border(`排队发送 · ${messages.length} 条`, columns)];
+    for (let index = 0; index < shown.length; index++) {
+      const text = clean(shown[index].text).replace(/\s+/g, ' ').trim();
+      lines.push('│ ' + fit(`${index + 1}. ${text}`, columns - 4) + ' │');
+    }
+    if (messages.length > shown.length) lines.push('│ ' + fit(`另有 ${messages.length - shown.length} 条排队消息`, columns - 4) + ' │');
+    lines.push(border('', columns, '╰', '╯'));
+    return lines;
+  }
+  viewport(content, height) {
+    height = Math.max(0, height);
+    const state = this.scrollState;
+    state.total = content.length; state.height = Math.max(0, height);
+    const normalMax = Math.max(0, content.length - height);
+    if (state.top !== null) state.top = Math.min(state.top, normalMax + this.bottomPadding());
+    const top = state.top ?? normalMax;
+    const visible = content.slice(top, top + height);
+    // Keep the sender visible when a long message begins above the viewport.
+    if (height > 1 && top > 0 && content[top]?.startsWith('│')) {
+      const heading = content.slice(0, top).findLast(line => line.startsWith('╭─ '));
+      if (heading) {
+        const title = heading.slice(3).replace(/─*╮$/, '').trim();
+        const columns = Array.from(heading).reduce((sum, char) => sum + width(char), 0);
+        visible[0] = border(title + ' · 续', columns);
+      }
+    }
+    return [...visible, ...Array(Math.max(0, height - visible.length)).fill('')];
+  }
+  workerListPresentation() {
+    return {
+      title: `Worker 列表 ${this.workers.length ? this.selected + 1 : 0}/${this.workers.length}${this.showArchivedOnce ? ' · 含归档' : ''}${this.workerFocus === 'list' ? ' ·' : ''}`,
+      items: this.workers.map(worker => ({
+        id: worker.id,
+        title: worker.title ?? this.service.state.pipelines[worker.pipelineId]?.title ?? worker.id,
+        status: worker.archivedAt ? '已归档' : statusLabel(worker.status),
+        description: `${worker.provider}${worker.model ? '/' + worker.model : ''} / ${worker.kind}${worker.effort ? ' [' + worker.effort + ']' : ''}`
+      }))
+    };
+  }
+  workerDetailPresentation() {
+    const labels = { chat: '对话', files: '工作区', git: 'Git' };
+    const worker = this.worker;
+    return {
+      title: `Worker 详情 · ${labels[this.panel]}${this.workerFocus === 'detail' ? ' ●' : ''}`,
+      views: Object.entries(labels).map(([panel, label]) => panel === this.panel ? `[${label}]` : ` ${label} `).join(' ') + '  ←→',
+      metadata: worker ? [
+        `${worker.id} · ${statusLabel(worker.status)} · ${worker.provider} / ${worker.kind}`,
+        `任务：${worker.title ?? this.service.state.pipelines[worker.pipelineId]?.title ?? worker.id}${this.panel === 'git' ? ' [' + this.diffMode + ']' : ''}`,
+        ...(worker.notes?.length ? [`备注：${worker.notes.join(' · ')}`] : [])
+      ] : []
+    };
+  }
+  pendingRequestLines() {
+    const state = this.service.state;
+    return [...state.approvals.map(a => `审批 ${a.id} [${a.actor}] · /approval ${a.id} 查看`), ...state.questions.map(q => `问题 ${q.id} [${q.actor}] · /question ${q.id} 查看`)];
+  }
+  workerList(state, columns, height, compact = false) {
+    const model = this.workerListPresentation(), title = model.title;
+    if (height <= 2) {
+      const summary = this.worker ? `${this.worker.archivedAt ? '已归档' : statusLabel(this.worker.status)} ${this.worker.title ?? state.pipelines[this.worker.pipelineId]?.title ?? this.worker.id}` : '尚无 worker';
+      return [border(title, columns), border(summary, columns, '╰', '╯')].slice(0, height);
+    }
+    const lines = [border(title, columns)];
+    const add = text => lines.push('│ ' + fit(text, columns - 4) + ' │');
+    if (!this.workers.length) add('尚无 worker');
+    const itemHeight = compact ? 1 : 3;
+    const count = Math.max(1, Math.floor((height - 2) / itemHeight));
+    const first = Math.max(0, Math.min(this.selected - count + 1, this.workers.length - count));
+    for (let i = first; i < Math.min(this.workers.length, first + count); i++) {
+      const w = model.items[i], title = w.title;
+      const workerStatus = w.status;
+      const marker = i === this.selected ? '▶' : ' ';
+      if (compact) add(`${marker} ${workerStatus} · ${title}`);
+      else {
+        add(`${marker} ${title}`);
+        add(`  ${workerStatus} · ${w.description}`);
+        add(`  ${w.id}`);
+      }
+    }
+    while (lines.length < height - 1) add('');
+    return [...lines.slice(0, height - 1), border('', columns, '╰', '╯')];
+  }
+  workerView(state, columns, height, rowOffset = 0, colOffset = 0) {
+    if (height < 1) return [];
+    const model = this.workerDetailPresentation();
+    const lines = [border(model.title, columns)];
+    const add = text => lines.push('│ ' + fit(text, columns - 4) + ' │');
+    if (height >= 7) add(model.views);
+    const worker = this.worker;
+    if (worker && height >= 8) {
+      add(model.metadata[0]);
+      add(model.metadata[1]);
+    }
+    if (worker && height >= 9 && worker.notes?.length) add(model.metadata[2]);
+    const contentWidth = columns - 4;
+    const content = !worker ? wrap('尚无 worker，Ctrl+Tab 返回 Manager 发送需求。', contentWidth)
+      : this.panel === 'chat' ? this.conversation(worker.id, contentWidth)
+      : wrap(this.preview || '输入 /refresh 加载当前视图。', contentWidth);
+    const viewContent = content.length ? content : ['等待 worker 对话…'];
+    const viewHeight = Math.max(0, height - lines.length - 1);
+    const visible = this.viewport(viewContent, viewHeight);
+    const top = this.scrollState.top ?? Math.max(0, viewContent.length - viewHeight);
+    this.lastConversationView = {
+      actor: worker?.id ?? null, lines: viewContent, top, height: viewHeight,
+      rowStart: rowOffset + lines.length, colStart: colOffset + 2, colEnd: colOffset + columns - 3
+    };
+    for (const line of visible) add(line);
+    if (height > 1) lines.push(border('', columns, '╰', '╯'));
+    return lines.slice(0, height);
+  }
+  headerLines(state, columns, rows) {
+    const compact = columns < 60 || rows < 18, tiny = columns < 40 || rows < 14;
+    const managerState = state.managerError ? '错误，发送消息重试'
+      : state.manager.hold ? '已中断，发送消息继续'
+        : state.managerBusy ? ((state.manager.active?.length ?? 0) ? '正在与用户对话' : '正在处理后台事件')
+          : '就绪';
+    const activeWorkers = this.workers.filter(worker => ['starting', 'running'].includes(worker.status)).length;
+    const active = new Set(state.manager.active ?? []);
+    const queued = (state.manager.pending ?? []).filter(item => !active.has(item.id)).length;
+    const status = `Manager ${managerState} · ${queued} 个任务待处理 · ${activeWorkers} 个 Worker 正在工作`;
+    const hint = this.screen === 'manager'
+      ? compact ? '↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 滚动 · Ctrl+Tab · /help' : '↑↓ 历史 · Alt+↑↓ 项目 · Ctrl+↑↓ 滚动 · Shift+↑↓ 顶部/底部 · PgUp/PgDn · Ctrl+Tab · F5 · /help'
+      : compact ? 'F6 焦点 · ↑↓ 选择/滚动 · Alt+↑↓ 项目 · Ctrl+Tab · /help' : 'F6 焦点 · ↑↓ 选择/滚动 · Ctrl+↑↓/PgUp/PgDn 滚详情 · Shift+↑↓ 顶部/底部 · Alt+↑↓ 项目 · Ctrl+Tab · /help';
+    const lines = [fit(`${PRODUCT_NAME} · ${this.screen === 'manager' ? 'Manager' : 'Workers'}`, columns)];
+    const add = (label, value) => {
+      if (tiny) lines.push(compactLabeledLine(label, value, columns));
+      else lines.push(...labeledLines(label, value, columns));
+    };
+    const projects = this.service.projects ?? [{ code: '', root: this.service.git?.root ?? '', active: true }];
+    this.projectScroll = Math.max(0, Math.min(this.projectScroll, Math.max(0, projects.length - 3)));
+    const windowProjects = projects.slice(this.projectScroll, this.projectScroll + 3);
+    for (let index = 0; index < windowProjects.length; index++) {
+      const project = windowProjects[index];
+      const label = index === 0 ? '项目' : '    ';
+      const value = `${project.code ? `-[${project.code}] ` : ''}${tiny ? tail(project.root, Math.max(8, columns - 12)) : project.root}${project.active ? ' *' : ''}`;
+      if (tiny) lines.push(compactLabeledLine(label, value, columns));
+      else lines.push(...labeledLines(label, value, columns));
+    }
+    add('状态', status);
+    if (this.settings.showShortcutHints) add('提示', hint);
+    lines.push('─'.repeat(columns));
+    return lines;
+  }
+  frame(columns, rows) {
+    const state = this.service.snapshot(), lines = [];
+    this.lastConversationView = null;
+    const add = text => lines.push(fitStyled(text, columns));
+    for (const line of this.headerLines(state, columns, rows)) add(line);
+    const pending = this.pendingRequestLines();
+    const pendingLines = pending.slice(0, Math.min(5, Math.max(1, rows - 12)));
+    const queuedLines = this.queuedMessageLines(state, columns, Math.max(1, Math.min(5, Math.floor(rows / 6))));
+    const input = this.inputPresentation(columns, Math.max(1, Math.floor(rows / 3)));
+    this.lastInputPresentation = input;
+    const available = Math.max(0, rows - lines.length - pendingLines.length - queuedLines.length - 3 - (input.lines.length - 1));
+    if (this.panel === 'settings') {
+      for (const line of this.settingsView(columns, available)) add(line);
+    } else if (['help', 'request'].includes(this.panel)) {
+      const content = wrap(this.preview, columns);
+      const visible = this.viewport(content, available);
+      const top = this.scrollState.top ?? Math.max(0, content.length - available);
+      this.lastConversationView = { actor: '__panel__', lines: content, top, height: available, rowStart: lines.length, colStart: 0, colEnd: columns - 1 };
+      for (const line of visible) add(line);
+    } else if (this.screen === 'manager') {
+      const content = this.conversation('manager', columns);
+      const viewContent = content;
+      const visible = this.viewport(viewContent, available);
+      const top = this.scrollState.top ?? Math.max(0, viewContent.length - available);
+      this.lastConversationView = { actor: 'manager', lines: viewContent, top, height: available, rowStart: lines.length, colStart: 0, colEnd: columns - 1 };
+      for (const line of visible) add(line);
+    } else if (columns >= 80) {
+      const leftWidth = Math.min(38, Math.floor(columns * 0.36)), rightWidth = columns - leftWidth - 3;
+      const list = this.workerList(state, leftWidth, available), view = this.workerView(state, rightWidth, available, lines.length, leftWidth + 3);
+      for (let i = 0; i < available; i++) add(fit(list[i] ?? '', leftWidth) + ' │ ' + (view[i] ?? ''));
+    } else {
+      const desired = Math.min(4, Math.max(2, Math.floor(available / 3)));
+      const listHeight = Math.max(0, Math.min(available, desired));
+      const separator = available > listHeight ? 1 : 0;
+      const list = this.workerList(state, columns, listHeight, true);
+      for (let i = 0; i < listHeight; i++) add(list[i] ?? '');
+      if (separator) add('─'.repeat(columns));
+      for (const line of this.workerView(state, columns, available - listHeight - separator, lines.length)) add(line);
+    }
+    for (const line of pendingLines) add(line);
+    for (const line of queuedLines) add(line);
+    add(this.notice || this.scrollHint() + ' | Enter → Manager · Shift+Enter → 换行');
+    add('─'.repeat(columns));
+    for (const inputLine of input.lines) lines.push(inputLine.plain);
+    this.lastFrameLines = lines.slice();
+    this.lastSize = { columns, rows };
+    return lines;
+  }
+  render() {}
+}
+
+return { TerminalUI };
+})();
+const { TerminalUI } = TerminalUI_module;
+
+  globalThis.LastOrderUI = { TerminalUI, DEFAULT_CONFIG, COMMANDS, commandUsage, commandCompletions,
+    conversationGroups, conversationPresentation, eventContent, messageLabel, renderMarkdown, stripFormatting, clean, fit, wrap, width,
+    setRuntime(info) { process.platform = info.platform; process.arch = info.arch; process.version = info.node; process.env.LO_CODEX_COMMAND = info.codex_command || ''; }
+  };
+})();
+</script>
+  <script>
+const previewStatus = {"snapshot":{"workers":{"worker_a1":{"id":"worker_a1","title":"Calculator UI","provider":"codex","model":"deepseek-flash","effort":"high","kind":"implement","status":"running","pipelineId":"p1","workspace":"/workspace/worktrees/worker_a1","notes":["Check mobile layout"]},"worker_b2":{"id":"worker_b2","title":"Adversarial review","provider":"codex","kind":"review","status":"queued","pipelineId":"p2","workspace":"/workspace/worktrees/worker_b2"}},"pipelines":{"p1":{"title":"Calculator UI"},"p2":{"title":"Adversarial review"}},"requests":{},"notifications":[],"manager":{"active":[],"pending":[{"id":"m2","text":"再检查一下手机横屏布局","queued":true}],"memoryEpoch":0,"sessionId":"thread-demo"},"approvals":[{"id":"approval_demo","actor":"worker_a1","detail":{"reason":"允许运行无头浏览器测试以检查计算器布局"}}],"questions":[],"managerBusy":false,"managerError":null},"config":{"manager":"codex","worker":"codex","managerModel":"deepseek-flash","managerEffort":"high","workerModel":"deepseek-flash","workerEffort":"high","codexApprovals":"auto_review","silenceMs":600000},"project_root":"/workspace/rebuildv3/AgentSupport"};
+const previewManagerHistory = [{"seq":1,"time":"2026-11-06T11:44:00.311Z","type":"manager_input","data":{"role":"user","text":"实现一个简单的计算器，并给移动端做一版交互预览。"}},{"seq":2,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"assistant","text":"我会把实现和独立验收拆成两个 worker，并保持需求判断与最终验收由 manager 负责。"}},{"seq":3,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"tool","text":"start_worker","tool":{"name":"start_worker","arguments":{"title":"Calculator UI","kind":"implement"},"result":{"worker_id":"worker_a1"}}}},{"seq":4,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"assistant","text":"实现 worker 已启动，正在独立 worktree 中开发。"}},{"seq":5,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"tool","text":"worker finished","tool":{"name":"inspect_worker","arguments":{"id":"worker_a1"},"result":{"status":"succeeded"}}}},{"seq":6,"time":"2026-11-06T11:44:00.311Z","type":"reported_result","data":{"status":"succeeded","summary":"计算器主流程已完成","evidence":"unit tests: 12 passed"}},{"seq":7,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"assistant","text":"初版实现已完成。验收 worker 正在检查除零、键盘输入和窄屏布局。"}}];
+const previewWorkerHistory = [{"seq":11,"time":"2026-11-06T11:44:00.311Z","type":"worker_input","data":{"role":"user","text":"实现计算器并运行验证。"}},{"seq":12,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"assistant","text":"先检查仓库结构，然后实现自包含页面。"}},{"seq":13,"time":"2026-11-06T11:44:00.311Z","type":"message","data":{"role":"tool","text":"command execution","tool":{"name":"commandExecution","arguments":{"command":"npm test"},"result":"12 tests passed","exitCode":0,"durationMs":1200}}},{"seq":14,"time":"2026-11-06T11:44:00.311Z","type":"reported_result","data":{"status":"succeeded","summary":"计算器实现并验证完成","evidence":"12 tests passed; browser smoke checked"}}];
+const previewProjects = [{"code":"A","name":"AgentSupport","root":"/workspace/rebuildv3/AgentSupport","active":true,"connected":true,"error":null},{"code":"B","name":"MobilePreview","root":"/workspace/mobile-preview","active":false,"connected":false,"error":null}];
+const params = new URLSearchParams(location.search);
+const scenario = params.get('scenario') || 'default';
+const theme = params.get('theme') || 'dark';
+document.body.classList.add('vscode-' + theme);
+const themes = {
+  light: { 'editor-background': '#ffffff', 'editor-foreground': '#242424', 'descriptionForeground': '#616161', 'panel-border': '#e5e5e5', 'sideBar-background': '#f8f8f8', 'editorWidget-background': '#ffffff', 'input-background': '#f4f4f4', 'input-foreground': '#242424', 'textCodeBlock-background': '#f4f4f4', 'textLink-foreground': '#006ab1' },
+  'high-contrast': { 'editor-background': '#000000', 'editor-foreground': '#ffffff', 'descriptionForeground': '#ffffff', 'contrastBorder': '#ffffff', 'panel-border': '#ffffff', 'sideBar-background': '#000000', 'editorWidget-background': '#000000', 'input-background': '#000000', 'input-foreground': '#ffffff', 'focusBorder': '#f38518' }
+};
+for (const [name, value] of Object.entries(themes[theme] || {})) document.documentElement.style.setProperty('--vscode-' + name, value);
+if (params.has('font')) document.documentElement.style.setProperty('--vscode-font-size', params.get('font') + 'px');
+if (['empty', 'connecting', 'fatal', 'idle'].includes(scenario)) {
+  previewManagerHistory.length = 0;
+  previewStatus.snapshot.workers = {};
+  previewStatus.snapshot.approvals = [];
+  previewStatus.snapshot.manager.pending = [];
+}
+if (scenario === 'idle') {
+  previewStatus.project_root = 'D:/workspaces/SA';
+  previewProjects.splice(0, previewProjects.length, { code: 'A', name: 'SA', root: 'D:/workspaces/SA', active: true, connected: true });
+}
+if (scenario === 'no-hints') previewStatus.config.showShortcutHints = false;
+if (scenario === 'projects') {
+  for (let index = 2; index < 6; index++) previewProjects.push({ code: String.fromCharCode(65 + index), root: '/workspace/project-' + index, name: 'project-' + index, active: false });
+}
+if (scenario === 'worker-empty') previewWorkerHistory.length = 0;
+if (scenario === 'no-workspace') delete previewStatus.snapshot.workers.worker_a1.workspace;
+if (scenario === 'archived') previewStatus.snapshot.workers.worker_b2.archivedAt = '2026-11-06T11:44:00.311Z';
+if (scenario === 'worker-mixed') {
+  previewStatus.snapshot.workers.worker_b2.status = 'failed';
+  for (const [index, status] of ['paused', 'succeeded', 'interrupted', 'review_failed', 'waiting_approval'].entries()) {
+    const id = 'worker_extra_' + index;
+    previewStatus.snapshot.workers[id] = { id, title: '任务 ' + index, status, provider: 'codex', model: 'test-model', effort: 'high', kind: 'review', workspace: '/workspace/' + id };
+  }
+}
+if (scenario === 'epoch') {
+  previewStatus.snapshot.manager.memoryEpoch = 1;
+  previewManagerHistory.push({ seq: 100, type: 'message', data: { role: 'assistant', memoryEpoch: 1, text: '当前 epoch 的对话' } });
+}
+if (scenario === 'long-prompt') previewStatus.config.managerPrompt = '保留原来的工作规范与验收要求。\n'.repeat(40);
+if (scenario === 'busy') {
+  previewStatus.snapshot.managerBusy = true;
+  previewStatus.snapshot.manager.active = ['m1'];
+}
+if (scenario === 'interrupted') previewStatus.snapshot.manager.hold = true;
+if (scenario === 'error') previewStatus.snapshot.managerError = 'Provider connection lost. Refresh or send a new request to continue.';
+if (scenario === 'long') {
+  for (let i = 0; i < 80; i++) previewManagerHistory.push({ seq: 100 + i, time: '2026-11-06T11:44:00.311Z', type: 'message', data: { role: i % 2 ? 'assistant' : 'user', text: i % 2 ? 'Checked src/core/control-server.js and the worker conversation.\n\nThe update is ready for review.\n\n```js\nconst ready = true;\n```' : 'Continue checking the next state, including very-long-file-and-project-names-that-must-wrap-within-the-conversation.' } });
+}
+if (scenario === 'approvals') {
+  previewStatus.snapshot.approvals.push({ id: 'approval_long', actor: 'manager', detail: { command: 'node scripts/verify-layout.mjs --project /workspace/a-very-long-project-name '.repeat(12) } });
+}
+if (scenario === 'questions') {
+  previewStatus.snapshot.approvals = [];
+  previewStatus.snapshot.questions = [{ id: 'question_1', actor: 'manager', detail: { question: 'Which layout should the mobile calculator use?' } }, { id: 'question_2', actor: 'worker_b2', detail: { question: 'Should keyboard shortcuts be included? '.repeat(8) } }];
+}
+window.__previewMessages = [];
+let previewAttachments = [];
+window.addEventListener('error', event => {
+  document.body.dataset.error = JSON.stringify({ message: event.message, line: event.lineno, column: event.colno });
+});
+window.acquireVsCodeApi = () => ({
+  postMessage(message) {
+    window.__previewMessages.push(message);
+    if (message.type === 'pasteImages') {
+      previewAttachments = (message.images || []).map((image, index) => ({
+        path: '/tmp/pasted-' + index + '-' + image.name,
+        name: image.name,
+        mime: image.mime,
+        size: image.size,
+        preview: 'data:' + image.mime + ';base64,' + image.data
+      }));
+      window.postMessage({ type: 'attachments', attachments: previewAttachments }, '*');
+    }
+    if (message.type === 'removeAttachment') {
+      previewAttachments = previewAttachments.filter(item => item.path !== message.path);
+      window.postMessage({ type: 'attachments', attachments: previewAttachments }, '*');
+    }
+    if (message.type === 'ready') {
+      if (scenario === 'connecting') return;
+      if (scenario === 'fatal') {
+        setTimeout(() => window.postMessage({ type: 'fatal', message: 'Cannot reach the project backend.' }, '*'), 10);
+        return;
+      }
+      setTimeout(() => window.postMessage({ type: 'state', status: previewStatus, history: previewManagerHistory, projects: previewProjects, attachments: [] }, '*'), 10);
+    }
+    if (message.type === 'api') {
+      const values = {
+        history: message.actor && message.actor !== 'manager' ? { events: previewWorkerHistory } : { events: previewManagerHistory },
+        version: { version: '0.1.80', protocol: 2, pid: 4242, started_at: previewStatus.snapshot.manager.sessionId, node: 'v24.22.1', platform: 'linux', arch: 'x64', project_root: previewStatus.project_root, codex_command: '' },
+        files: { path: message.path || '', files: scenario === 'files-empty' ? [] : message.path?.endsWith('.js') ? 'export const sum = (a, b) => a + b;' : [{ name: 'app.js', directory: false }, { name: 'styles', directory: true }, { name: 'README.md', directory: false }] },
+        diff: { diff: scenario === 'git-empty' ? '' : ('diff --git a/src/app.js b/src/app.js\n@@ -1,3 +1,4 @@\n-old\n+new\n+reviewed' + (scenario === 'git-large' ? '\n+line'.repeat(200) : '')) },
+        content: { content: 'export function calculate(a, b) {\n  return a + b;\n}' },
+        turns: { turns: { data: [{ id: 'turn-1', status: 'completed', createdAt: '2026-11-06T12:00:00Z' }, { id: 'turn-2', status: 'completed', createdAt: '2026-11-06T12:03:00Z' }] } },
+        checkpoints: { checkpoints: [{ id: 'checkpoint-demo', label: 'Before responsive polish', createdAt: '2026-11-06T11:55:00Z' }] },
+        skills: { skills: { data: [{ skills: [{ name: 'frontend-design', description: 'Build and review web interfaces', path: '/workspace/.agents/skills/frontend-design/SKILL.md', scope: 'repo', enabled: true }, { name: 'playwright', description: 'Browser verification', path: '/home/user/.agents/skills/playwright/SKILL.md', scope: 'user', enabled: true }] }] } },
+        createCheckpoint: { checkpoint: { id: 'checkpoint-new', label: message.label || '' } },
+        restoreCheckpointById: { restoredFiles: ['worker_a1'], forkedConversations: ['manager'] },
+        forkConversation: { thread: { id: 'thread-forked' } },
+        clearMemory: { cleared: true },
+        interruptManager: { interrupted: true },
+        archiveWorker: { already_archived: false },
+        saveConfig: { config: message.config || previewStatus.config }
+      };
+      if (message.action === 'approval') previewStatus.snapshot.approvals = previewStatus.snapshot.approvals.filter(item => item.id !== message.approvalId);
+      if (message.action === 'question') previewStatus.snapshot.questions = previewStatus.snapshot.questions.filter(item => item.id !== message.questionId);
+      if (message.action === 'switchProject') {
+        previewProjects.forEach(item => { item.active = item.root === message.root; });
+        previewStatus.project_root = message.root;
+        values.switchProject = previewProjects.find(item => item.active);
+        window.postMessage({ type: 'state', status: previewStatus, projects: previewProjects, history: [] }, '*');
+      }
+      setTimeout(() => {
+        const failure = ({ 'send-failure': 'sendManager', 'files-error': 'files', 'git-error': 'diff', 'skills-error': 'skills', 'turns-error': 'turns' })[scenario] === message.action;
+        window.postMessage({ type: 'apiResult', id: message.id, value: values[message.action] ?? { ok: true }, error: failure ? 'Request failed: ' + message.action : undefined }, '*');
+        if (message.action === 'sendManager' && !failure) { previewAttachments = []; window.postMessage({ type: 'attachments', attachments: [] }, '*'); }
+        if (['approval', 'question'].includes(message.action)) window.postMessage({ type: 'state', status: previewStatus }, '*');
+      }, message.action === 'sendManager' ? 200 : 10);
+    }
+  },
+  getState() { return {}; },
+  setState() {}
+});
+setTimeout(async () => {
+  try {
+    const commands = { '#workers': '/workers', '#worker': '/workers', '#files': '/open src', '#git': '/diff task', '#commands': '/help', '#settings': '/settings', '#skills': '/skills', '#version': '/version', '#turns': '/turns', '#checkpoints': '/checkpoints' };
+    if (commands[location.hash]) {
+      ui.input = commands[location.hash];
+      await runKey('', { name: 'return' });
+      await drainPending();
+      await loadWorkerHistory();
+    }
+    if (location.hash === '#quote') ui.input = '> 已确认的需求\n\n请继续验证。';
+    renderNative();
+    document.body.dataset.previewReady = 'true';
+  } catch (error) { document.body.dataset.error = error.stack; }
+}, 40);
+
+// Native DOM adapter. Commands, keys and displayed content come from src/ui.js.
+const vscode = acquireVsCodeApi();
+const { TerminalUI, DEFAULT_CONFIG, conversationPresentation,
+  renderMarkdown, stripFormatting, fit, clean } = LastOrderUI;
+const state = {
+  snapshot: { workers: {}, pipelines: {}, requests: {}, notifications: [], manager: { pending: [], active: [] }, approvals: [], questions: [] },
+  config: { ...DEFAULT_CONFIG }, projects: [], projectRoot: '', histories: new Map(), attachments: [],
+  connected: false, connectionError: '', runtime: null, historyRequest: null, historyVersion: 0,
+  pending: new Set(), commandErrors: [], dimensions: { columns: 80, rows: 30, cell: 8, line: 20 }, scroll: new Map()
+};
+const requestQueue = new Map();
+let requestSequence = 0;
+let renderFrame;
+let keyChain = Promise.resolve();
+const $ = selector => document.querySelector(selector);
+const node = (tag, className, text) => {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+};
+const setText = (element, text) => { if (element.textContent !== text) element.textContent = text; };
+const PASTED_IMAGE_TYPES = new Map([
+  ['image/png', 'png'], ['image/jpeg', 'jpg'], ['image/gif', 'gif'], ['image/webp', 'webp']
+]);
+const PASTED_IMAGE_EXTENSIONS = new Map([
+  ['png', 'image/png'], ['jpg', 'image/jpeg'], ['jpeg', 'image/jpeg'], ['gif', 'image/gif'], ['webp', 'image/webp']
+]);
+const MAX_PASTED_IMAGE_BYTES = 20 * 1024 * 1024;
+function pastedImageMime(file) {
+  if (PASTED_IMAGE_TYPES.has(file.type)) return file.type;
+  const extension = /\.([^.]+)$/.exec(file.name ?? '')?.[1].toLowerCase();
+  return PASTED_IMAGE_EXTENSIONS.get(extension) ?? '';
+}
+function clipboardImageFiles(data) {
+  const files = Array.from(data?.items ?? [])
+    .filter(item => item.kind === 'file')
+    .map(item => item.getAsFile())
+    .filter(Boolean);
+  const candidates = files.length ? files : Array.from(data?.files ?? []);
+  return candidates
+    .map(file => ({ file, mime: pastedImageMime(file) }))
+    .filter(candidate => candidate.mime);
+}
+function readPastedImage(candidate, index) {
+  const { file, mime } = candidate;
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error('无法读取剪贴板图片'));
+    reader.onload = () => {
+      const data = String(reader.result ?? '').split(',', 2)[1];
+      if (!data) return reject(new Error('剪贴板图片为空'));
+      const extension = PASTED_IMAGE_TYPES.get(mime);
+      const name = file.name?.trim() || `pasted-image-${Date.now()}-${index + 1}.${extension}`;
+      resolve({ name, mime, size: file.size, data });
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function addPastedImages(candidates) {
+  const slots = Math.max(0, 8 - state.attachments.length);
+  if (!slots) {
+    ui.notice = '最多同时添加 8 张图片';
+    scheduleRender();
+    return;
+  }
+  if (candidates.length > slots) ui.notice = '最多同时添加 8 张图片';
+  const images = [];
+  for (const [index, candidate] of candidates.slice(0, slots).entries()) {
+    const { file } = candidate;
+    if (file.size > MAX_PASTED_IMAGE_BYTES) {
+      ui.notice = '单张图片不能超过 20 MB';
+      continue;
+    }
+    try { images.push(await readPastedImage(candidate, index)); }
+    catch (error) { ui.notice = error.message; }
+  }
+  if (images.length) post('pasteImages', { images });
+  scheduleRender();
+}
+function api(action, payload = {}) {
+  const id = ++requestSequence;
+  return new Promise((resolve, reject) => {
+    requestQueue.set(id, { resolve, reject });
+    vscode.postMessage({ ...payload, type: 'api', id, action });
+  });
+}
+function post(type, payload = {}) { vscode.postMessage({ type, ...payload }); }
+function track(promise) {
+  state.pending.add(promise);
+  promise.then(() => state.pending.delete(promise), error => {
+    state.pending.delete(promise);
+    state.commandErrors.push(error);
+    ui.notice = error.message;
+    scheduleRender();
+  });
+  return promise;
+}
+const service = {
+  get state() { return state.snapshot; }, get config() { return state.config; },
+  get projects() { return state.projects.length ? state.projects : [{ code: '', root: state.projectRoot, active: true }]; },
+  get info() { return state.runtime || {}; },
+  get approvals() { return new Map(state.snapshot.approvals.map(item => [item.id, item])); },
+  get questions() { return new Map(state.snapshot.questions.map(item => [item.id, item])); },
+  store: { history: actor => state.histories.get(actor) || [] },
+  snapshot: () => state.snapshot,
+  git: {
+    get root() { return state.projectRoot; },
+    files: async (worker, path = '') => {
+      const result = await api('files', { workerId: worker.id, path });
+      return result.files;
+    },
+    diff: async (worker, mode) => (await api('diff', { workerId: worker.id, mode })).diff
+  },
+  routeInput(text) {
+    const match = /^-([A-Za-z]{1,2})(?:\s+([\s\S]*))?$/.exec(text);
+    return match ? { project: match[1].toUpperCase(), text: match[2]?.trim() || '' } : null;
+  },
+  async switchProject(selector) {
+    const project = service.projects.find(item => item.code === selector || item.root === selector);
+    if (!project) throw new Error(`Unknown project: ${selector}`);
+    const value = await api('switchProject', { root: project.root });
+    return { ...project, ...value };
+  },
+  sendManagerMessage: (text, interrupt = false, quotes = [], attachments = []) => track(api('sendManager', { text, interrupt, quotes, attachments })),
+  interruptManager: () => track(api('interruptManager')),
+  clearManagerMemory: () => track(api('clearMemory')),
+  sendWorkerMessage: (workerId, text) => track(api('sendWorker', { workerId, text })),
+  controlWorker: (workerId, workerAction, reason) => track(api('controlWorker', { workerId, workerAction, reason })),
+  archiveWorker: (workerId, reason) => track(api('archiveWorker', { workerId, reason })),
+  conversationEvent: async (actor, seq) => {
+    const cached = service.store.history(actor).find(event => event.seq === seq);
+    return cached || (await api('conversationEvent', { actor, seq })).event;
+  },
+  listSkills: (actor, forceReload) => api('skills', { actor, forceReload }),
+  conversationTurns: async (actor, limit) => (await api('turns', { actor, limit })).turns,
+  forkConversation: async (actor, options) => (await api('forkConversation', { actor, ...options })).thread,
+  revertConversation: (actor, beforeTurnId) => track(api('revertConversation', { actor, beforeTurnId })),
+  listCheckpoints: async () => (await api('checkpoints')).checkpoints,
+  createCheckpoint: async label => (await api('createCheckpoint', { label })).checkpoint,
+  restoreCheckpoint: (checkpointId, options) => track(api('restoreCheckpointById', {
+    checkpointId, mode: options.files === false ? 'conversation' : options.conversation === false ? 'files' : 'all'
+  })),
+  respondApproval: (approvalId, allowed) => track(api('approval', { approvalId, allowed })),
+  answerQuestion: (questionId, answer) => track(api('question', { questionId, answer })),
+  shutdown: () => track(api('shutdown'))
+};
+const ui = new TerminalUI(service, {
+  quit: () => api('closeView'), reload: () => api('reloadWindow'),
+  saveSettings: async config => {
+    const result = await api('saveConfig', { config });
+    return result.config || config;
+  },
+  openMonitor: async worker => { await api('monitorWorker', { workerId: worker.id }); },
+  takeAttachments: () => state.attachments.map(({ preview, ...attachment }) => attachment),
+  copyText: text => post('copyText', { text })
+});
+ui.render = scheduleRender;
+
+function measure() {
+  const cell = $('#cell-measure').getBoundingClientRect().width / 10 || 8;
+  const shell = $('.app-shell');
+  const style = getComputedStyle(shell);
+  const available = shell.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const line = parseFloat(getComputedStyle(document.body).lineHeight) || 20;
+  state.dimensions = { columns: Math.max(24, Math.floor(available / cell)), rows: Math.max(12, Math.floor(innerHeight / line)), cell, line };
+  return state.dimensions;
+}
+function scheduleRender() {
+  if (!renderFrame) renderFrame = requestAnimationFrame(() => { renderFrame = null; renderNative(); });
+}
+function ansiFragment(source) {
+  const fragment = document.createDocumentFragment();
+  const pattern = /\x1b\[([0-9;]*)m|\x1b\]8;;([^\x07\x1b]*)(?:\x07|\x1b\\)/g;
+  const styles = new Set();
+  let target = '', position = 0, match;
+  const append = text => {
+    if (!text) return;
+    const element = target ? node('a', [...styles].join(' '), text) : node('span', [...styles].join(' '), text);
+    if (target) { element.href = '#'; element.dataset.external = target; }
+    fragment.append(element);
+  };
+  while ((match = pattern.exec(source))) {
+    append(source.slice(position, match.index));
+    if (match[2] !== undefined) target = match[2];
+    else for (const value of (match[1] || '0').split(';').map(Number)) {
+      if (value === 0) styles.clear();
+      else if (value === 1) styles.add('bold');
+      else if (value === 2 || value === 90) styles.add('dim');
+      else if (value === 3) styles.add('italic');
+      else if (value === 4) styles.add('underline');
+      else if (value === 36) styles.add('code');
+    }
+    position = pattern.lastIndex;
+  }
+  append(source.slice(position));
+  return fragment;
+}
+function reconcile(container, desired) {
+  for (const child of [...container.childNodes]) if (child.nodeType === Node.TEXT_NODE) child.remove();
+  desired.forEach((element, index) => {
+    if (container.children[index] !== element) container.insertBefore(element, container.children[index] || null);
+  });
+  while (container.children.length > desired.length) container.lastElementChild.remove();
+}
+function currentScroller() {
+  if (['help', 'request'].includes(ui.panel)) return $('#auxiliary-preview');
+  if (ui.panel === 'settings') return $('#settings-view');
+  if (ui.panel === 'manager') return $('#manager-messages');
+  return ui.panel === 'chat' ? $('#worker-messages') : $('#worker-preview');
+}
+function scrollMetrics() {
+  const scroller = currentScroller();
+  const line = state.dimensions.line;
+  const normalMax = Math.max(0, ui.scrollState.total - ui.scrollState.height);
+  const pixels = Math.max(0, scroller.scrollHeight - tailPadding(scroller) - scroller.clientHeight);
+  const offset = scroller.scrollTop - pixels;
+  ui.scrollState.top = Math.abs(offset) < line / 2 ? null
+    : offset > 0 ? normalMax + Math.round(offset / line)
+      : pixels ? Math.round(scroller.scrollTop / pixels * normalMax) : 0;
+}
+function tailPadding(scroller) { return parseFloat(scroller.style.getPropertyValue('--tail-padding')) || 0; }
+function followBottom(scroller) { return Math.max(0, scroller.scrollHeight - tailPadding(scroller) - scroller.clientHeight); }
+ui.scrollBy = delta => {
+  const scroller = currentScroller();
+  scroller.scrollTop += delta * state.dimensions.line;
+  scrollMetrics();
+};
+ui.scrollTo = position => {
+  const scroller = currentScroller();
+  scroller.scrollTop = position === 'top' ? 0 : followBottom(scroller);
+  ui.scrollState.top = position === 'top' ? 0 : null;
+};
+
+function renderConversation(container, actor, columns) {
+  const events = ui.visibleConversationEvents(actor);
+  const signature = JSON.stringify([actor, columns, events, [...ui.expandedActors], [...ui.expandedGroups], [...ui.collapsedGroups]]);
+  if (container.dataset.signature === signature) return;
+  const previousActor = container.dataset.actor;
+  const following = Math.abs(followBottom(container) - container.scrollTop) < state.dimensions.line * 2;
+  if (previousActor && previousActor !== actor) state.scroll.set(previousActor, { top: container.scrollTop, following });
+  const old = new Map([...container.children].map(element => [element.dataset.key, element]));
+  const desired = [];
+  for (const group of conversationPresentation(events, actor, ui)) {
+    const key = `${actor}:${group.kind === 'background' ? 'background:' + group.id : 'message:' + group.event.seq}`;
+    const contents = JSON.stringify([
+      columns,
+      group.kind === 'message' ? group.event
+        : group.kind === 'combined' ? [group.event, group.intermediate]
+          : group.events,
+      group.number
+    ]);
+    let element = old.get(key);
+    if (element?.dataset.contents !== contents) {
+      if (group.kind === 'message') {
+        const event = group.event;
+        element = node('article', `message ${event.data.role || event.type}`);
+        element.append(node('div', 'message-label', group.title));
+        const body = node('div', 'message-body');
+        body.append(ansiFragment(renderMarkdown(group.content, Math.max(8, columns - 6)).join('\n')));
+        element.append(body);
+      } else if (group.kind === 'combined') {
+        const event = group.event;
+        element = node('article', `message combined-message ${event.data.role || event.type}`);
+        const intermediate = node('details', 'message-intermediate');
+        intermediate.open = group.intermediate.expanded;
+        intermediate.append(
+          node('summary', '', group.intermediate.title),
+          node('div', 'background-collapsed', group.intermediate.collapsedContent)
+        );
+        const intermediateBody = node('div', 'background-content');
+        intermediateBody.append(ansiFragment(renderMarkdown(group.intermediate.expandedContent, Math.max(8, columns - 6)).join('\n')));
+        intermediate.append(intermediateBody);
+        intermediate.addEventListener('toggle', () => {
+          if (intermediate.open) { ui.expandedGroups.add(`${actor}:${group.intermediate.id}`); ui.collapsedGroups.delete(`${actor}:${group.intermediate.id}`); }
+          else { ui.collapsedGroups.add(`${actor}:${group.intermediate.id}`); ui.expandedGroups.delete(`${actor}:${group.intermediate.id}`); }
+          scheduleRender();
+        });
+        const body = node('div', 'message-body message-final-body');
+        body.append(ansiFragment(renderMarkdown(group.content, Math.max(8, columns - 6)).join('\n')));
+        element.append(intermediate, node('div', 'message-label message-final-label', group.title), body);
+      } else {
+        element = node('details', 'background-group');
+        element.append(node('summary'), node('div', 'background-collapsed', group.collapsedContent));
+        const body = node('div', 'background-content');
+        body.append(ansiFragment(renderMarkdown(group.expandedContent, Math.max(8, columns - 6)).join('\n')));
+        element.append(body);
+        element.addEventListener('toggle', () => {
+          if (element.open) { ui.expandedGroups.add(`${actor}:${group.id}`); ui.collapsedGroups.delete(`${actor}:${group.id}`); }
+          else { ui.collapsedGroups.add(`${actor}:${group.id}`); ui.expandedGroups.delete(`${actor}:${group.id}`); }
+          scheduleRender();
+        });
+      }
+      element.dataset.key = key;
+      element.dataset.contents = contents;
+    }
+    if (group.kind === 'background') {
+      element.open = group.expanded;
+      setText(element.querySelector('summary'), group.title);
+    } else if (group.kind === 'combined') {
+      const intermediate = element.querySelector('.message-intermediate');
+      intermediate.open = group.intermediate.expanded;
+      setText(intermediate.querySelector('summary'), group.intermediate.title);
+    }
+    desired.push(element);
+  }
+  const previousScroll = container.scrollTop;
+  reconcile(container, desired);
+  container.dataset.signature = signature;
+  container.dataset.actor = actor;
+  const saved = previousActor !== actor ? state.scroll.get(actor) : null;
+  if (saved && !saved.following) container.scrollTop = saved.top;
+  else if (following || previousActor !== actor) requestAnimationFrame(() => { container.scrollTop = followBottom(container); });
+  else container.scrollTop = previousScroll;
+}
+function renderWorkers() {
+  const model = ui.workerListPresentation();
+  setText($('#worker-list-title'), model.title);
+  const list = $('#worker-list');
+  const signature = JSON.stringify([model.items, ui.selected, state.dimensions.columns < 80]);
+  if (list.dataset.signature !== signature) {
+    const old = new Map([...list.children].map(element => [element.dataset.workerId, element]));
+    const desired = model.items.map((item, index) => {
+      const text = JSON.stringify(item);
+      let element = old.get(item.id);
+      if (element?.dataset.contents !== text) {
+        element = node('div', 'worker-row');
+        element.dataset.workerId = item.id;
+        element.dataset.contents = text;
+        element.id = `worker-${item.id}`;
+        element.setAttribute('role', 'option');
+        element.append(node('div', 'worker-name'), node('div', 'worker-meta', `  ${item.status} · ${item.description}`), node('div', 'worker-id', '  ' + item.id));
+      }
+      const compact = state.dimensions.columns < 80;
+      setText(element.firstChild, compact ? `${index === ui.selected ? '▶' : ' '} ${item.status} · ${item.title}` : `${index === ui.selected ? '▶' : ' '} ${item.title}`);
+      element.setAttribute('aria-selected', String(index === ui.selected));
+      return element;
+    });
+    if (!desired.length) desired.push(node('div', 'dim', '尚无 worker'));
+    reconcile(list, desired);
+    list.dataset.signature = signature;
+    list.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+  }
+  if (ui.worker) list.setAttribute('aria-activedescendant', `worker-${ui.worker.id}`);
+  const detail = ui.workerDetailPresentation();
+  setText($('#worker-detail-heading'), [detail.title, detail.views, ...detail.metadata].join('\n'));
+  const chat = ui.panel === 'chat';
+  $('#worker-messages').classList.toggle('hidden', !chat);
+  $('#worker-preview').classList.toggle('hidden', chat);
+  if (chat && ui.worker) {
+    renderConversation($('#worker-messages'), ui.worker.id, workerColumns());
+    if (!$('#worker-messages').children.length) setText($('#worker-messages'), '等待 worker 对话…');
+  }
+  else if (chat) setText($('#worker-messages'), '尚无 worker，Ctrl+Tab 返回 Manager 发送需求。');
+  else setText($('#worker-preview'), ui.worker ? ui.preview || '输入 /refresh 加载当前视图。' : '尚无 worker，Ctrl+Tab 返回 Manager 发送需求。');
+}
+function workerColumns() {
+  return Math.max(12, Math.floor($('#worker-messages').clientWidth / state.dimensions.cell) - 2);
+}
+function renderSettings() {
+  const container = $('#settings-view');
+  const fields = ui.settingsFieldDefs();
+  const signature = JSON.stringify([fields, ui.settingsIndex, ui.settingsEditing]);
+  if (container.dataset.signature === signature) return;
+  const editorFocused = document.activeElement.id === 'settings-editor';
+  const desired = [node('div', 'settings-title', '设置 · 保存后重启生效')];
+  fields.forEach((field, index) => {
+    const row = node('div', `settings-field${index === ui.settingsIndex ? ' selected' : ''}`);
+    row.dataset.setting = field.key;
+    row.append(node('span', '', index === ui.settingsIndex ? '▶' : ' '), node('span', '', field.label));
+    if (ui.settingsEditing === field.key) {
+      let editor = $('#settings-editor');
+      if (!editor) { editor = node('textarea'); editor.id = 'settings-editor'; }
+      if (editor.value !== (ui.settingsDraft[field.key] || '')) editor.value = ui.settingsDraft[field.key] || '';
+      editor.setAttribute('aria-label', field.label);
+      row.append(editor);
+    } else row.append(node('span', 'settings-value', field.type === 'text' ? field.value || '（空）' : field.value));
+    desired.push(row);
+  });
+  desired.push(node('div', 'settings-hint', '↑↓ 选择 · ←→ 修改 · Enter 编辑/保存 · Ctrl+J 换行 · Ctrl+S 保存 · Esc 取消'));
+  container.replaceChildren(...desired);
+  container.dataset.signature = signature;
+  container.querySelector('.selected')?.scrollIntoView({ block: 'nearest' });
+  if (ui.settingsEditing) { $('#settings-editor').focus(); if (!editorFocused) $('#settings-editor').setSelectionRange($('#settings-editor').value.length, $('#settings-editor').value.length); }
+}
+function renderInput() {
+  const input = $('#composer-input');
+  const active = document.activeElement === input;
+  if (input.value !== ui.input) {
+    input.value = ui.input;
+    const position = Array.from(ui.input).slice(0, ui.cursor).join('').length;
+    input.setSelectionRange(position, position);
+  }
+  const maxRows = Math.max(1, Math.floor(state.dimensions.rows / 3));
+  const presentation = ui.inputPresentation(state.dimensions.columns, maxRows);
+  const ghost = $('#input-ghost');
+  const ghostSignature = JSON.stringify(presentation.lines.map(line => [line.plain, line.text]));
+  if (ghost.dataset.signature !== ghostSignature) {
+    const overlay = document.createDocumentFragment();
+    presentation.lines.forEach((line, index) => {
+      if (index) overlay.append(document.createTextNode('\n'));
+      overlay.append(document.createTextNode(line.text));
+      if (ui.input && line.ghost) overlay.append(node('span', 'ghost', line.ghost));
+      if (ui.input && line.note) overlay.append(node('span', 'completion-note', line.note));
+    });
+    ghost.replaceChildren(overlay);
+    ghost.dataset.signature = ghostSignature;
+  }
+  const sizeKey = ui.input + ':' + input.clientWidth + ':' + state.dimensions.line;
+  if (input.dataset.sizeKey !== sizeKey) {
+    input.style.height = 'auto';
+    input.style.height = Math.min(maxRows * state.dimensions.line, Math.max(state.dimensions.line, input.scrollHeight)) + 'px';
+    input.dataset.sizeKey = sizeKey;
+  }
+  ghost.scrollTop = input.scrollTop;
+  if (active) input.focus({ preventScroll: true });
+}
+function renderAttachments() {
+  const tray = $('#attachment-tray');
+  const signature = JSON.stringify(state.attachments);
+  if (tray.dataset.signature === signature) return;
+  tray.replaceChildren(...state.attachments.map(attachment => {
+    const item = node('div', 'attachment');
+    const image = node('img'); image.src = attachment.preview || ''; image.alt = attachment.name;
+    const name = node('span', '', attachment.name); name.title = attachment.path;
+    const remove = node('button', '', '×'); remove.type = 'button'; remove.title = 'Remove image';
+    remove.dataset.removeAttachment = attachment.path;
+    item.append(image, name, remove);
+    return item;
+  }));
+  tray.dataset.signature = signature;
+}
+function renderNative() {
+  const { columns, rows } = measure();
+  const wide = columns >= 80;
+  $('.workers-layout').classList.toggle('compact', !wide);
+  $('.workers-layout').style.gridTemplateColumns = wide ? `${Math.min(38, Math.floor(columns * .36)) * state.dimensions.cell}px minmax(0, 1fr)` : '';
+  ui.selected = Math.max(0, Math.min(ui.selected, ui.workers.length - 1));
+  const header = ui.headerLines(service.state, columns, rows).slice(0, -1).map(line => line.trimEnd()).join('\n');
+  setText($('#tui-header'), header);
+  $('#tui-header').title = service.projects.map(project => `${project.code ? '-[' + project.code + '] ' : ''}${project.root}${project.active ? ' *' : ''}`).join('\n');
+  const auxiliary = ['help', 'request', 'settings'].includes(ui.panel);
+  $('#manager-pane').classList.toggle('active', !auxiliary && ui.screen === 'manager');
+  $('#workers-pane').classList.toggle('active', !auxiliary && ui.screen === 'workers');
+  $('#auxiliary-pane').classList.toggle('active', auxiliary);
+  if (auxiliary) {
+    $('#auxiliary-preview').classList.toggle('hidden', ui.panel === 'settings');
+    $('#settings-view').classList.toggle('hidden', ui.panel !== 'settings');
+    if (ui.panel === 'settings') renderSettings();
+    else setText($('#auxiliary-preview'), ui.preview);
+  } else if (ui.screen === 'manager') renderConversation($('#manager-messages'), 'manager', columns);
+  else renderWorkers();
+  const requests = ui.pendingRequestLines().slice(0, Math.min(5, Math.max(1, rows - 12)));
+  const requestSignature = JSON.stringify(requests);
+  if ($('#pending-requests').dataset.signature !== requestSignature) {
+    $('#pending-requests').replaceChildren(...requests.map(line => node('div', 'pending-request', line)));
+    $('#pending-requests').dataset.signature = requestSignature;
+  }
+  const queue = ui.queuedMessageLines(service.state, columns, Math.max(1, Math.min(5, Math.floor(rows / 6))));
+  $('#pending-queue').classList.toggle('hidden', !queue.length);
+  setText($('#pending-queue'), queue.map(line => line.trimEnd()).join('\n'));
+  renderInput();
+  renderAttachments();
+  // The original layout computes the same line counts and available viewport as CLI.
+  // Only its notice is read; frame strings are never painted into the DOM or sent over IPC.
+  const layout = ui.frame(columns, rows);
+  const inputRows = ui.lastInputPresentation.lines.length;
+  setText($('#notice'), layout[layout.length - inputRows - 2].trimEnd());
+  const scroller = currentScroller();
+  scroller.style.setProperty('--tail-padding', `${Math.min(12, Math.max(3, Math.floor(ui.scrollState.height / 3))) * state.dimensions.line}px`);
+  document.body.dataset.screen = ui.screen;
+  document.body.dataset.panel = ui.panel;
+  document.body.dataset.connected = String(state.connected);
+  if (document.body.dataset.postedScreen !== ui.screen) {
+    post('tabChanged', { tab: ui.screen });
+    document.body.dataset.postedScreen = ui.screen;
+  }
+}
+function syncInput() {
+  const input = $('#composer-input');
+  ui.inputValue = input.value;
+  ui.cursor = Array.from(input.value.slice(0, input.selectionEnd)).length;
+  ui.inputSelection = input.selectionStart !== input.selectionEnd ? {
+    anchor: Array.from(input.value.slice(0, input.selectionStart)).length,
+    focus: Array.from(input.value.slice(0, input.selectionEnd)).length
+  } : null;
+}
+async function loadWorkerHistory(force = false) {
+  const worker = ui.worker;
+  if (ui.screen !== 'workers' || ui.panel !== 'chat' || !worker || (!force && state.historyRequest === worker.id)) return;
+  state.historyRequest = worker.id;
+  const version = ++state.historyVersion;
+  try {
+    const result = await api('history', { actor: worker.id, limit: 400 });
+    if (version === state.historyVersion) state.histories.set(worker.id, result.events || []);
+  } catch (error) { ui.notice = error.message; }
+  finally { if (version === state.historyVersion) state.historyRequest = null; scheduleRender(); }
+}
+async function drainPending() {
+  while (state.pending.size) await Promise.allSettled([...state.pending]);
+  if (state.commandErrors.length) { ui.notice = state.commandErrors.at(-1).message; state.commandErrors = []; }
+}
+async function runKey(text, key) {
+  const inputFocused = document.activeElement === $('#composer-input');
+  const previousPanel = ui.panel;
+  const previousWorker = ui.worker?.id;
+  try {
+    if (key.name === 'return' && !key.ctrl && !['settings'].includes(ui.panel) && !ui.input.startsWith('/') && (!state.connected || state.connectionError)) {
+      ui.notice = state.connectionError || '正在连接项目…';
+    } else if (ui.input.trim() === '/refresh' && key.name === 'return' && state.connectionError) {
+      await api('refresh'); ui.input = ''; ui.notice = '已重新连接';
+    } else await ui.key(text, key);
+    await drainPending();
+    if (ui.worker?.id !== previousWorker || ui.panel !== previousPanel) await loadWorkerHistory();
+  } catch (error) { ui.notice = error.message; }
+  renderNative();
+  if (ui.panel !== 'settings' && (inputFocused || ['f1', 'f2', 'f3', 'f4', 'tab', 'escape'].includes(key.name))) $('#composer-input').focus({ preventScroll: true });
+  if (key.name === 'f6' && ui.screen === 'workers') (ui.workerFocus === 'list' ? $('#worker-list') : currentScroller()).focus();
+}
+function enqueueKey(text, key) {
+  const task = runKey(text, key);
+  keyChain = Promise.allSettled([keyChain, task]);
+  return task;
+}
+$('#composer-input').addEventListener('input', () => {
+  syncInput();
+  ui.historyIndex = ui.history.length;
+  ui.historyDraft = '';
+  ui.notice = '';
+  scheduleRender();
+  void ui.loadCompletionFiles();
+  void ui.loadSkillCompletions();
+});
+$('#composer-input').addEventListener('scroll', () => { $('#input-ghost').scrollTop = $('#composer-input').scrollTop; });
+$('#composer-input').addEventListener('paste', event => {
+  const files = clipboardImageFiles(event.clipboardData);
+  if (!files.length) return;
+  event.preventDefault();
+  void addPastedImages(files);
+});
+document.addEventListener('keydown', event => {
+  if (event.isComposing || event.defaultPrevented) return;
+  const name = ({ Enter: 'return', Escape: 'escape', ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', PageUp: 'pageup', PageDown: 'pagedown' })[event.key] || event.key.toLowerCase();
+  const key = { name, ctrl: event.ctrlKey, shift: event.shiftKey, meta: event.metaKey, alt: event.altKey };
+  const input = $('#composer-input');
+  const editing = event.target.id === 'settings-editor';
+  if (editing) {
+    if (event.ctrlKey && name === 'j') {
+      event.preventDefault(); event.target.setRangeText('\n', event.target.selectionStart, event.target.selectionEnd, 'end');
+      ui.settingsDraft[ui.settingsEditing] = event.target.value; return;
+    }
+    if (!['return', 'escape'].includes(name) && !(event.ctrlKey && name === 's')) return;
+  }
+  if (ui.panel === 'settings') {
+    if (!editing && event.target !== input && !['up', 'down', 'left', 'right', 'return', 'escape'].includes(name) && !(key.ctrl && name === 's')) return;
+    event.preventDefault();
+    void enqueueKey('', key);
+    return;
+  }
+  if (event.target === input) syncInput();
+  if (key.ctrl && name === 'q') {
+    const selected = window.getSelection()?.toString();
+    if (selected) {
+      event.preventDefault();
+      const quote = selected.split('\n').map(line => '> ' + line).join('\n') + '\n\n';
+      input.setRangeText(quote, input.selectionStart, input.selectionEnd, 'end');
+      input.dispatchEvent(new Event('input', { bubbles: true })); input.focus(); return;
+    }
+  }
+  if (key.ctrl && name === 'c') {
+    const selected = window.getSelection()?.toString() || input.value.slice(input.selectionStart, input.selectionEnd);
+    if (selected) return;
+    event.preventDefault(); ui.notice = 'Ctrl+C 不退出 TUI；使用 /quit 或 Ctrl+D 退出'; scheduleRender(); return;
+  }
+  if ((key.ctrl || key.meta) && ['v', 'a', 'x', 'z', 'y'].includes(name)) return;
+  const nativeEditing = event.target === input && (
+    (!key.ctrl && !key.alt && !key.meta && (event.key.length === 1 || ['backspace', 'delete', 'home', 'end'].includes(name))) ||
+    (ui.input && ['left', 'right'].includes(name) && !key.ctrl)
+  );
+  if (nativeEditing) return;
+  const handled = ['return', 'escape', 'up', 'down', 'left', 'right', 'pageup', 'pagedown', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6'].includes(name)
+    || name === 'tab' || (key.ctrl && ['p', 'n', 'u', 'q', 'd'].includes(name))
+    || ((key.ctrl && ['home', 'end'].includes(name))) || (event.target !== input && !key.ctrl && !key.alt && event.key.length === 1);
+  if (!handled) return;
+  event.preventDefault();
+  if (key.ctrl && ['home', 'end'].includes(name)) {
+    ui.scrollTo(name === 'home' ? 'top' : 'bottom'); scheduleRender(); return;
+  }
+  void enqueueKey(event.key.length === 1 && !key.ctrl && !key.alt ? event.key : '', key);
+});
+document.addEventListener('input', event => {
+  if (event.target.id === 'settings-editor' && ui.settingsEditing) ui.settingsDraft[ui.settingsEditing] = event.target.value;
+});
+$('#settings-view').addEventListener('click', event => {
+  const row = event.target.closest('[data-setting]');
+  if (!row || ui.settingsEditing) return;
+  ui.settingsIndex = ui.settingsFieldDefs().findIndex(field => field.key === row.dataset.setting);
+  scheduleRender();
+});
+$('#worker-list').addEventListener('click', event => {
+  const row = event.target.closest('[data-worker-id]');
+  if (!row) return;
+  ui.selected = ui.workers.findIndex(worker => worker.id === row.dataset.workerId);
+  ui.workerFocus = 'list';
+  void ui.refresh().then(() => loadWorkerHistory()).then(scheduleRender);
+});
+document.addEventListener('click', event => {
+  const link = event.target.closest('[data-external]');
+  if (link) { event.preventDefault(); post('openExternal', { url: link.dataset.external }); }
+  const remove = event.target.closest('[data-remove-attachment]');
+  if (remove) post('removeAttachment', { path: remove.dataset.removeAttachment });
+});
+document.querySelectorAll('.message-scroll, .content-preview').forEach(element => element.addEventListener('scroll', () => {
+  if (element === currentScroller()) { scrollMetrics(); setText($('#notice'), fit(ui.notice || ui.scrollHint() + ' | Enter → Manager · Shift+Enter → 换行', state.dimensions.columns).trimEnd()); }
+}, { passive: true }));
+window.addEventListener('resize', () => { ui.conversationCache.clear(); scheduleRender(); });
+window.addEventListener('focus', () => post('focusChanged', { focused: true }));
+window.addEventListener('blur', () => post('focusChanged', { focused: false }));
+document.addEventListener('visibilitychange', () => post('focusChanged', { focused: !document.hidden }));
+window.addEventListener('message', event => {
+  const message = event.data;
+  if (message.type === 'apiResult') {
+    const pending = requestQueue.get(message.id); requestQueue.delete(message.id);
+    if (message.error) pending?.reject(new Error(message.error)); else pending?.resolve(message.value);
+    return;
+  }
+  if (message.type === 'state') {
+    const previousConfig = JSON.stringify(state.config);
+    const wasConnected = state.connected;
+    if (message.status?.project_root && state.projectRoot && message.status.project_root !== state.projectRoot) {
+      state.histories.clear(); state.scroll.clear(); state.historyVersion++;
+      state.historyRequest = null; state.runtime = null;
+    }
+    if (!state.connected && (ui.notice === '正在连接项目…' || ui.notice === state.connectionError)) ui.notice = '';
+    state.snapshot = message.status?.snapshot || state.snapshot;
+    state.snapshot.manager ||= { pending: [], active: [] };
+    state.snapshot.approvals ||= []; state.snapshot.questions ||= [];
+    state.config = { ...DEFAULT_CONFIG, ...(message.status?.config || state.config) };
+    state.projectRoot = message.status?.project_root || state.projectRoot;
+    state.projects = message.projects || state.projects;
+    if (message.history) state.histories.set('manager', message.history);
+    const previews = new Map(state.attachments.map(item => [item.path, item.preview]));
+    state.attachments = (message.attachments || state.attachments).map(item => ({ ...item, preview: item.preview || previews.get(item.path) }));
+    state.connected = true; state.connectionError = '';
+    if (!wasConnected || previousConfig !== JSON.stringify(state.config)) ui.settings = { ...state.config };
+    if (!state.runtime) void api('version').then(info => { state.runtime = info; LastOrderUI.setRuntime(info); }).catch(error => { ui.notice = error.message; });
+    scheduleRender(); void loadWorkerHistory(); return;
+  }
+  if (message.type === 'attachments') { state.attachments = message.attachments || []; scheduleRender(); }
+  if (message.type === 'toast') { ui.notice = message.message; scheduleRender(); }
+  if (message.type === 'fatal') { state.connectionError = message.message; state.connected = false; ui.notice = message.message; scheduleRender(); }
+  if (message.type === 'switchTab') void ui.showPanel(message.tab === 'manager' ? 'manager' : ui.workerPanel).then(() => loadWorkerHistory()).then(scheduleRender);
+  if (message.type === 'openWorker') {
+    ui.selected = Math.max(0, ui.workers.findIndex(worker => worker.id === message.workerId));
+    void ui.showPanel('chat').then(() => loadWorkerHistory()).then(scheduleRender);
+  }
+});
+ui.notice = '正在连接项目…';
+renderNative();
+post('ready');
+</script>
+</body>
+</html>

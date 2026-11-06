@@ -5,8 +5,9 @@ import { COMMANDS, commandCompletions } from '../src/commands.js';
 test('slash prefixes discover commands with descriptions and free text is preserved', () => {
   assert.equal(commandCompletions('/').items.length, COMMANDS.length);
   assert.deepEqual(commandCompletions('/app').items.map(i => i.value), ['/approval ', '/approve ']);
-  assert.equal(commandCompletions('/w').items[0].value, '/w ', 'an exact command takes precedence over a longer command sharing its prefix');
-  assert.ok(commandCompletions('/w').items.find(i => i.value === '/w ').description.includes('需先选择 worker'));
+  assert.equal(commandCompletions('/ver').items[0].value, '/version');
+  assert.equal(commandCompletions('/w').items[0].value, '/w', 'an exact command takes precedence over a longer command sharing its prefix');
+  assert.equal(commandCompletions('/w').items[0].description, '打开 Workers 界面');
   assert.equal(commandCompletions('hello /approve').items.length, 0);
   assert.equal(commandCompletions('/interrupt 请先检查不要改代码').items.length, 0);
   assert.match(commandCompletions('/interrupt 请先检查不要改代码').hint, /中止 Manager|打断 Manager/);
@@ -24,6 +25,8 @@ test('parameter suggestions use live requests and worker context without complet
   assert.deepEqual(commandCompletions('/expand ', context).items.map(i => i.value), ['/expand all', '/expand 1']);
   assert.deepEqual(commandCompletions('/diff ', context).items.map(i => i.value), ['/diff task', '/diff uncommitted']);
   assert.equal(commandCompletions('/monitor worker', context).items[0].value, '/monitor worker_1');
+  assert.equal(commandCompletions('/msg worker', context).items[0].value, '/msg worker_1 ');
+  assert.equal(commandCompletions('/msg worker_1 inspect', context).items.length, 0);
 });
 
 test('installed skills provide contextual completions', () => {

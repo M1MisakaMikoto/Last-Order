@@ -23,7 +23,12 @@ function writeClipboard(command, args, text, encoding = 'utf8') {
   });
 }
 
-export async function copyText(text, platform = process.platform) {
+function headlessClipboardError(action) {
+  const verb = action === 'copy' ? '复制' : '读取';
+  return new Error(`无法${verb}系统剪贴板：当前 Linux 会话未设置 DISPLAY 或 WAYLAND_DISPLAY。SSH 或无桌面环境请使用终端粘贴快捷键 Ctrl+Shift+V 或 Shift+Insert。`);
+}
+
+export async function copyText(text, platform = process.platform, env = process.env) {
   if (platform === 'win32') {
     try {
       await writeClipboard('clip.exe', [], text, 'utf16le');
@@ -42,10 +47,19 @@ export async function copyText(text, platform = process.platform) {
     return;
   }
   if (platform === 'linux') {
+    if (env.WAYLAND_DISPLAY) {
+      try {
+        await writeClipboard('wl-copy', [], text);
+        return;
+      } catch (error) {
+        if (!env.DISPLAY) throw new Error(`Wayland 剪贴板不可用：${error.message}。请安装 wl-clipboard，或使用终端粘贴快捷键 Ctrl+Shift+V / Shift+Insert。`);
+      }
+    }
+    if (!env.DISPLAY) throw headlessClipboardError('copy');
     try {
-      await writeClipboard('wl-copy', [], text);
-    } catch {
       await writeClipboard('xclip', ['-selection', 'clipboard'], text);
+    } catch (error) {
+      throw new Error(`X11 剪贴板不可用：${error.message}。请检查 DISPLAY 与 XAUTHORITY，或使用终端粘贴快捷键 Ctrl+Shift+V / Shift+Insert。`);
     }
     return;
   }
@@ -82,7 +96,7 @@ function readClipboardCommand(command, args, platform = process.platform) {
   });
 }
 
-export async function readClipboard(platform = process.platform) {
+export async function readClipboard(platform = process.platform, env = process.env) {
   if (platform === 'win32') {
     return readClipboardCommand('powershell.exe', [
       '-NoProfile',
@@ -93,10 +107,18 @@ export async function readClipboard(platform = process.platform) {
   }
   if (platform === 'darwin') return readClipboardCommand('pbpaste', [], platform);
   if (platform === 'linux') {
+    if (env.WAYLAND_DISPLAY) {
+      try {
+        return await readClipboardCommand('wl-paste', ['--no-newline'], platform);
+      } catch (error) {
+        if (!env.DISPLAY) throw new Error(`Wayland 剪贴板不可用：${error.message}。请安装 wl-clipboard，或使用终端粘贴快捷键 Ctrl+Shift+V / Shift+Insert。`);
+      }
+    }
+    if (!env.DISPLAY) throw headlessClipboardError('read');
     try {
-      return await readClipboardCommand('wl-paste', ['--no-newline'], platform);
-    } catch {
-      return readClipboardCommand('xclip', ['-selection', 'clipboard', '-o'], platform);
+      return await readClipboardCommand('xclip', ['-selection', 'clipboard', '-o'], platform);
+    } catch (error) {
+      throw new Error(`X11 剪贴板不可用：${error.message}。请检查 DISPLAY 与 XAUTHORITY，或使用终端粘贴快捷键 Ctrl+Shift+V / Shift+Insert。`);
     }
   }
   throw new Error(`当前平台不支持读取剪贴板：${platform}`);

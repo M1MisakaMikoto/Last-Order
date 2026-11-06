@@ -1,5 +1,6 @@
 export const COMMANDS = [
   { name: 'help', description: '查看帮助' },
+  { name: 'version', description: '查看 Last Order、Mission Control、provider 与运行平台版本' },
   { name: 'reload', description: '快速重启 Last Order 并应用最新配置' },
   { name: 'settings', description: '配置启动参数，保存后重启生效' },
   { name: 'monitor', usage: '[worker_id]', description: '在独立窗口监视 worker', args: 'worker' },
@@ -10,7 +11,8 @@ export const COMMANDS = [
   { name: 'interrupt', usage: '[消息]', description: '中止 Manager 当前工作；带消息时优先处理新消息', args: 'text' },
   { name: 'memory', usage: 'status|clear', description: '查看或清空 Manager 原生会话', args: 'text' },
   { name: 'skills', usage: '[manager|worker_id]', description: '列出当前 Codex 会话可见的 skills', args: 'worker' },
-  { name: 'w', usage: '消息', description: '向选中 worker 发消息', args: 'text', required: true, worker: true },
+  { name: 'w', description: '打开 Workers 界面' },
+  { name: 'msg', usage: 'worker_id 消息', description: '向指定 worker 发消息，操作同步给 manager', args: 'worker-message', required: true },
   { name: 'pause', description: '暂停选中 worker', worker: true },
   { name: 'resume', description: '恢复选中 worker', worker: true },
   { name: 'cancel', description: '取消选中 worker', worker: true },
@@ -91,6 +93,20 @@ export function commandCompletions(input, context = {}) {
   if (!command) return { items: [], hint: '未知命令，输入 /help 查看帮助' };
   const hint = commandUsage(command) + ' · ' + description(command);
   const prefix = argument.toLowerCase(), values = [];
+  if (command.name === 'msg') {
+    const target = input.replace(/^\/msg\s*/i, '');
+    if (!/\s/.test(target)) {
+      const items = (context.workers ?? [])
+        .filter(worker => worker.id.toLowerCase().startsWith(target.toLowerCase()))
+        .map(worker => ({
+          value: '/msg ' + worker.id + ' ',
+          label: worker.id,
+          description: `${worker.provider ?? ''} / ${worker.kind ?? ''} · ${worker.status ?? ''} · ${worker.title ?? context.pipelines?.[worker.pipelineId]?.title ?? ''}`
+        }));
+      return { command, hint, items };
+    }
+    return { command, hint, items: [] };
+  }
   if (command.name === 'memory') {
     const items = MEMORY_ACTIONS.filter(item => item.value.startsWith(prefix)).map(item => ({
       value: '/memory ' + item.value,

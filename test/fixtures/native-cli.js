@@ -25,7 +25,10 @@ if (mode === 'opencode') {
       events.write('data: ' + JSON.stringify({ type: 'permission.asked', properties: { id: 'permission-fixture', sessionID: 'session-fixture', permission: 'bash', patterns: ['fixture'] } }) + '\n\n');
       const decision = await new Promise(resolve => { permissionResponse = resolve; });
       if (decision !== 'once') { res.statusCode = 400; return res.end('{}'); }
-      await callTool(); return res.end(JSON.stringify({ info: { role: 'assistant' }, parts: [{ type: 'text', text: 'Fixture done' }] }));
+      events.write('data: ' + JSON.stringify({ type: 'message.part.updated', properties: { sessionID: 'session-fixture', part: { id: 'part-fixture', messageID: 'message-fixture', sessionID: 'session-fixture', type: 'text', text: 'Fixture ' } } }) + '\n\n');
+      events.write('data: ' + JSON.stringify({ type: 'message.part.updated', properties: { sessionID: 'session-fixture', part: { id: 'part-fixture', messageID: 'message-fixture', sessionID: 'session-fixture', type: 'text', text: 'Fixture done' } } }) + '\n\n');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      await callTool(); return res.end(JSON.stringify({ info: { role: 'assistant' }, parts: [{ id: 'part-fixture', type: 'text', text: 'Fixture done' }] }));
     }
     if (url.pathname === '/permission/permission-fixture/reply') { permissionResponse(JSON.parse(body).reply); return res.end('{}'); }
     res.writeHead(404).end('{}');
@@ -46,7 +49,12 @@ if (mode === 'opencode') {
       if (msg.type === 'user') output({ type: 'control_request', request_id: 'approval-fixture', request: { subtype: 'can_use_tool', tool_name: 'Bash', input: { command: 'echo fixture' } } });
       if (msg.type === 'control_response') {
         if (msg.response.response.behavior !== 'allow') throw new Error('Fixture was denied');
-        await callTool(); output({ type: 'assistant', message: { content: [{ type: 'text', text: 'Fixture done' }] } }); output({ type: 'result', is_error: false, session_id: 'session-fixture' });
+        await callTool();
+        output({ type: 'stream_event', event: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }, session_id: 'session-fixture' });
+        output({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'Fixture ' } }, session_id: 'session-fixture' });
+        output({ type: 'stream_event', event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'done' } }, session_id: 'session-fixture' });
+        output({ type: 'stream_event', event: { type: 'content_block_stop', index: 0 }, session_id: 'session-fixture' });
+        output({ type: 'assistant', message: { content: [{ type: 'text', text: 'Fixture done' }] } }); output({ type: 'result', is_error: false, session_id: 'session-fixture' });
       }
       return;
     }
@@ -68,12 +76,14 @@ if (mode === 'opencode') {
         output({ id: 'tool-fixture', method: 'item/tool/call', params: { threadId: 'session-fixture', turnId, callId: 'report', tool: 'report_result', arguments: result } });
       } else {
         if (msg.result.outcome.optionId !== 'yes') throw new Error('ACP approval mapping incorrect');
-        await callTool(); output({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'session-fixture', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Fixture done' } } } }); output({ jsonrpc: '2.0', id: turnId, result: { stopReason: 'end_turn' } });
+        await callTool(); output({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'session-fixture', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Fixture ' } } } }); output({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: 'session-fixture', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'done' } } } }); output({ jsonrpc: '2.0', id: turnId, result: { stopReason: 'end_turn' } });
       }
     }
     if (msg.id === 'tool-fixture') {
       if (!msg.result.success) throw new Error('Tool callback failed');
-      output({ method: 'item/completed', params: { item: { type: 'agentMessage', text: 'Fixture done' } } }); output({ method: 'turn/completed', params: { turn: { id: turnId, status: 'completed' } } });
+        output({ method: 'item/agentMessage/delta', params: { threadId: 'session-fixture', turnId, itemId: 'agent-fixture', delta: 'Fixture ' } });
+        output({ method: 'item/agentMessage/delta', params: { threadId: 'session-fixture', turnId, itemId: 'agent-fixture', delta: 'done' } });
+        output({ method: 'item/completed', params: { item: { id: 'agent-fixture', type: 'agentMessage', text: 'Fixture done' } } }); output({ method: 'turn/completed', params: { turn: { id: turnId, status: 'completed' } } });
     }
   }
 }

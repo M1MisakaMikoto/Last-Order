@@ -1,7 +1,10 @@
 import { createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
-import path from 'node:path';
+import nodePath from 'node:path';
+import { CONTROL_PROTOCOL_VERSION } from './identity.js';
+import { APP_VERSION } from './version.js';
+import { normalizeConfig, saveConfig } from './config.js';
 
 const json = (res, status, value) => {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
@@ -25,13 +28,38 @@ function readJson(req) {
 
 export async function startControlServer(service, { token, onShutdown = () => {} } = {}) {
   if (!token) throw new Error('Control token is required');
+  const eventClients = new Set();
+  const broadcast = event => {
+    const payload = JSON.stringify({ type: event?.type ?? 'change', actor: event?.actor, seq: event?.seq, method: event?.method });
+    for (const client of eventClients) {
+      try { client.write(`data: ${payload}\n\n`); }
+      catch { eventClients.delete(client); }
+    }
+  };
+  service.on?.('change', broadcast);
+  service.on?.('activity', broadcast);
   const server = createServer(async (req, res) => {
     try {
       if (req.headers.authorization !== `Bearer ${token}`) return json(res, 401, { error: 'Unauthorized' });
       const url = new URL(req.url, 'http://127.0.0.1');
       const path = url.pathname;
       let match;
-      if (req.method === 'GET' && path === '/health') return json(res, 200, { ok: true });
+      if (req.method === 'GET' && path === '/events') {
+        res.writeHead(200, {
+          'content-type': 'text/event-stream; charset=utf-8',
+          'cache-control': 'no-cache',
+          connection: 'keep-alive'
+        });
+        res.write(': connected\n\n');
+        eventClients.add(res);
+        const remove = () => eventClients.delete(res);
+        req.on('close', remove);
+        res.on('close', remove);
+        return;
+      }
+      if (req.method === 'GET' && path === '/health') {
+        return json(res, 200, { ok: true, protocol: CONTROL_PROTOCOL_VERSION, version: APP_VERSION });
+      }
       if (req.method === 'GET' && path === '/status') {
         return json(res, 200, {
           snapshot: service.snapshot(), config: service.config,
@@ -41,7 +69,7 @@ export async function startControlServer(service, { token, onShutdown = () => {}
       if (req.method === 'GET' && path === '/history') {
         const actor = url.searchParams.get('actor') || 'manager';
         const limit = Math.max(1, Math.min(500, Number(url.searchParams.get('limit') || 200)));
-        return json(res, 200, { actor, events: service.store.history(actor, limit) });
+        return json(res, 200, { actor, events: service.history ? service.history(actor, limit) : service.store.history(actor, limit) });
       }
       if (req.method === 'GET' && path === '/conversation/turns') {
         const actor = url.searchParams.get('actor') || 'manager';
@@ -118,6 +146,12 @@ export async function startControlServer(service, { token, onShutdown = () => {}
       if (req.method === 'POST' && path === '/manager/memory/clear') {
         return json(res, 200, await service.clearManagerMemory());
       }
+      if (req.method === 'POST' && path === '/config') {
+        const body = await readJson(req);
+        const config = normalizeConfig(service.config, body.config ?? {});
+        await saveConfig(nodePath.join(service.git.directory, 'config.json'), config);
+        return json(res, 200, { config, restart_required: true });
+      }
       match = /^\/worker\/([^/]+)\/(message|control|notes|archive)$/.exec(path);
       if (req.method === 'POST' && match) {
         const workerId = decodeURIComponent(match[1]), body = await readJson(req);
@@ -157,6 +191,10 @@ export async function startControlServer(service, { token, onShutdown = () => {}
   return {
     url: `http://127.0.0.1:${address.port}`,
     close: async () => {
+      service.off?.('change', broadcast);
+      service.off?.('activity', broadcast);
+      for (const client of eventClients) client.end();
+      eventClients.clear();
       server.closeAllConnections?.();
       await new Promise(resolve => server.close(resolve));
     }
@@ -166,9 +204,9 @@ export async function startControlServer(service, { token, onShutdown = () => {}
 export async function publishControlServer(service, { onShutdown } = {}) {
   const token = randomBytes(32).toString('hex');
   const control = await startControlServer(service, { token, onShutdown });
-  const controlPath = path.join(service.git.directory, 'control.json');
+  const controlPath = nodePath.join(service.git.directory, 'control.json');
   const info = {
-    url: control.url, token, pid: process.pid,
+    url: control.url, token, pid: process.pid, protocol: CONTROL_PROTOCOL_VERSION, version: APP_VERSION,
     project_root: service.git.root, data_directory: service.git.directory,
     config: service.config, started_at: new Date().toISOString()
   };

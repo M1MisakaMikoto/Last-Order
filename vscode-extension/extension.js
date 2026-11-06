@@ -3,9 +3,11 @@ const cp = require('child_process');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const os = require('os');
 const http = require('http');
 const crypto = require('crypto');
 const { promisify } = require('util');
+const { buildUiRuntime } = require('./ui-runtime.cjs');
 
 const execFile = promisify(cp.execFile);
 let extensionContext;
@@ -14,20 +16,74 @@ let client;
 let serviceProcess;
 let ownsService = false;
 let refreshTimer;
+let refreshQueued = false;
+let controlSubscription;
+let controlSubscriptionClient;
+let controlSubscriptionTimer;
 let treeProvider;
 let statusBar;
 let refreshing = false;
 let lastStatus;
-let managerTuiProvider;
+let activeProjectRoot;
+let projectCatalog = [];
+let managerWebviewProvider;
+const workerMonitors = new Map();
 let gitDiffViewer;
 const seenApprovals = new Set();
 const seenQuestions = new Set();
-let tuiTerminal;
 const IMAGE_MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.gif': 'image/gif', '.webp': 'image/webp'
 };
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+const IMAGE_EXTENSION = {
+  'image/png': '.png', 'image/jpeg': '.jpg', 'image/gif': '.gif', 'image/webp': '.webp'
+};
+const CONTROL_PROTOCOL_VERSION = 2;
+
+function hasImageSignature(buffer, mime) {
+  if (mime === 'image/png') {
+    return buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  }
+  if (mime === 'image/jpeg') {
+    return buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  }
+  if (mime === 'image/gif') {
+    const header = buffer.subarray(0, 6).toString('ascii');
+    return header === 'GIF87a' || header === 'GIF89a';
+  }
+  if (mime === 'image/webp') {
+    return buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP';
+  }
+  return false;
+}
+
+async function writePastedImage(image, directory = path.join(os.tmpdir(), 'last-order-pasted-images')) {
+  const mime = String(image?.mime ?? '').toLowerCase();
+  const defaultExtension = IMAGE_EXTENSION[mime];
+  if (!defaultExtension) throw new Error('Only PNG, JPEG, GIF and WebP images can be pasted');
+  const encoded = String(image?.data ?? '').replace(/^data:[^,]*,/, '').replace(/\s+/g, '');
+  if (!encoded) throw new Error('The pasted image is empty');
+  if (encoded.length > Math.ceil(MAX_IMAGE_BYTES * 4 / 3) + 4) throw new Error('Image attachment exceeds 20 MB');
+  const buffer = Buffer.from(encoded, 'base64');
+  if (!buffer.length) throw new Error('The pasted image is empty');
+  if (buffer.length > MAX_IMAGE_BYTES) throw new Error('Image attachment exceeds 20 MB');
+  if (!hasImageSignature(buffer, mime)) throw new Error('The pasted data is not a valid image');
+
+  const rawName = path.basename(String(image?.name || `pasted-image${defaultExtension}`));
+  const suppliedExtension = path.extname(rawName).toLowerCase();
+  const extension = IMAGE_MIME[suppliedExtension] === mime ? suppliedExtension : defaultExtension;
+  const stem = (path.basename(rawName, path.extname(rawName)).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim() || 'pasted-image').slice(0, 100);
+  const name = `${stem}${extension}`;
+  const digest = crypto.createHash('sha256').update(buffer).digest('hex').slice(0, 16);
+  const filePath = path.join(directory, `${digest}-${name}`);
+  await fsp.mkdir(directory, { recursive: true });
+  await fsp.writeFile(filePath, buffer);
+  return {
+    name, path: filePath, mime, size: buffer.length,
+    preview: `data:${mime};base64,${buffer.toString('base64')}`
+  };
+}
 
 class ControlClient {
   constructor(info) {
@@ -63,6 +119,31 @@ class ControlClient {
   health() {
     return this.request('GET', '/health');
   }
+
+  subscribe(onEvent) {
+    const url = new URL('/events', this.info.url);
+    const request = http.request(url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${this.info.token}` }
+    }, response => {
+      if (response.statusCode >= 400) { response.resume(); return; }
+      response.setEncoding('utf8');
+      let buffer = '';
+      response.on('data', chunk => {
+        buffer += chunk.replace(/\r\n/g, '\n');
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+          const block = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+          const data = block.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+          if (!data) continue;
+          try { onEvent(JSON.parse(data)); } catch {}
+        }
+      });
+    });
+    request.on('error', () => {});
+    request.end();
+    return () => request.destroy();
+  }
 }
 
 function workspaceRoot() {
@@ -91,6 +172,68 @@ async function resolveRepositoryRoot(root = workspaceRoot()) {
   return visit(root, 0);
 }
 
+async function discoverProjectRoots(workspace = workspaceRoot()) {
+  if (!workspace) return [];
+  if (fs.existsSync(path.join(workspace, '.git'))) return [path.resolve(workspace)];
+  const roots = [];
+  try {
+    const entries = (await fsp.readdir(workspace, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const candidate = path.join(workspace, entry.name);
+      if (fs.existsSync(path.join(candidate, '.git'))) roots.push(path.resolve(candidate));
+    }
+  } catch {}
+  if (roots.length) return [...new Set(roots)];
+  try {
+    const top = (await execFile('git', ['rev-parse', '--show-toplevel'], { cwd: workspace })).stdout.trim();
+    if (top) roots.push(path.resolve(top));
+  } catch {}
+  if (!roots.length) {
+    const root = await resolveRepositoryRoot(workspace);
+    if (root) roots.push(path.resolve(root));
+  }
+  return [...new Set(roots)];
+}
+
+function projectCodes(count) {
+  return Array.from({ length: count }, (_, index) => {
+    let value = index + 1, code = '';
+    while (value > 0) {
+      value--;
+      code = String.fromCharCode(65 + value % 26) + code;
+      value = Math.floor(value / 26);
+    }
+    return code;
+  });
+}
+
+async function initializeProjectCatalog() {
+  const roots = await discoverProjectRoots();
+  const existing = new Map(projectCatalog.map(project => [project.root, project]));
+  const codes = projectCodes(roots.length);
+  projectCatalog = roots.map((root, index) => existing.get(root) ?? ({
+    root, name: path.basename(root), code: codes[index],
+    client: null, process: null, owns: false, status: null, error: null
+  }));
+  projectCatalog.forEach((project, index) => { project.code = codes[index]; });
+  if (!projectCatalog.some(project => project.root === activeProjectRoot)) {
+    activeProjectRoot = projectCatalog[0]?.root;
+  }
+  return projectCatalog;
+}
+
+function projectSnapshot() {
+  return projectCatalog.map(project => ({
+    code: project.code,
+    name: project.name,
+    root: project.root,
+    active: project.root === activeProjectRoot,
+    connected: Boolean(project.client),
+    error: project.error ?? null
+  }));
+}
+
 async function dataDirectory(root) {
   const common = (await execFile('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: root })).stdout.trim();
   return path.join(common, 'last-order');
@@ -105,6 +248,16 @@ async function readControlInfo(root) {
   return null;
 }
 
+async function waitForBackendStop(client, timeout = 5000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    try { await client.health(); }
+    catch { return; }
+  }
+  throw new Error('The previous Last Order backend did not stop. Run /shutdown or end the old TUI before reloading.');
+}
+
 function serviceScript() {
   const configured = vscode.workspace.getConfiguration('missionControl').get('serviceScript', '').trim();
   if (configured) return configured;
@@ -112,9 +265,11 @@ function serviceScript() {
 }
 
 function backendFile(relative) {
+  const development = path.resolve(extensionContext.extensionPath, '..', relative);
+  if (fs.existsSync(path.resolve(extensionContext.extensionPath, '..', 'src/ui.js')) && fs.existsSync(development)) return development;
   const bundled = path.resolve(extensionContext.extensionPath, 'backend', relative);
   if (fs.existsSync(bundled)) return bundled;
-  return path.resolve(extensionContext.extensionPath, '..', relative);
+  return development;
 }
 
 function nodeExecutable() {
@@ -166,25 +321,71 @@ function waitForReady(child) {
   });
 }
 
+function stopControlSubscription() {
+  controlSubscription?.();
+  controlSubscription = undefined;
+  controlSubscriptionClient = undefined;
+  clearTimeout(controlSubscriptionTimer);
+  controlSubscriptionTimer = undefined;
+}
+
+function ensureControlSubscription() {
+  if (!client || (controlSubscription && controlSubscriptionClient === client)) return;
+  stopControlSubscription();
+  const subscribedClient = client;
+  controlSubscriptionClient = subscribedClient;
+  controlSubscription = client.subscribe(() => {
+    if (client !== subscribedClient) return;
+    clearTimeout(controlSubscriptionTimer);
+    controlSubscriptionTimer = setTimeout(() => { void refreshState(); }, 20);
+  });
+}
+
 async function ensureClient() {
+  const expectedVersion = extensionContext.extension?.packageJSON?.version ?? 'unknown';
   if (client) {
-    try { await client.health(); return client; } catch { client = undefined; }
+    try {
+      const health = await client.health();
+      if (health.protocol === CONTROL_PROTOCOL_VERSION && health.version === expectedVersion) {
+        ensureControlSubscription();
+        return client;
+      }
+    } catch {}
+    stopControlSubscription();
+    client = undefined;
   }
   const workspace = workspaceRoot();
   if (!workspace) throw new Error('Open a project folder before starting Last Order');
-  const root = await resolveRepositoryRoot(workspace);
+  if (!projectCatalog.length) await initializeProjectCatalog();
+  const project = projectCatalog.find(item => item.root === activeProjectRoot) ?? projectCatalog[0];
+  if (project) activeProjectRoot = project.root;
+  const root = project?.root ?? await resolveRepositoryRoot(workspace);
   if (!root) throw new Error('No Git repository found in the opened workspace');
   const existing = await readControlInfo(root);
   if (existing) {
     const candidate = new ControlClient(existing);
+    let health;
     try {
-      await candidate.health();
-      client = candidate;
-      ownsService = false;
-      output.appendLine(`Attached to Last Order backend ${existing.url}`);
-      return client;
+      health = await candidate.health();
     } catch {
       output.appendLine('Ignoring stale Last Order backend control.json');
+    }
+    if (health) {
+      if (health.protocol === CONTROL_PROTOCOL_VERSION && health.version === expectedVersion) {
+        client = candidate;
+        ownsService = false;
+        serviceProcess = undefined;
+        if (project) {
+          project.client = client; project.process = null; project.owns = false; project.error = null;
+        }
+        output.appendLine(`Attached to Last Order backend ${existing.url}`);
+        ensureControlSubscription();
+        return client;
+      }
+      output.appendLine(`Stopping incompatible Last Order backend (protocol ${health.protocol ?? 'legacy'} -> ${CONTROL_PROTOCOL_VERSION}, version ${health.version ?? 'legacy'} -> ${expectedVersion})`);
+      try { await candidate.request('POST', '/shutdown'); } catch {}
+      try { await waitForBackendStop(candidate); }
+      catch (error) { throw new Error(`Cannot replace the old Last Order backend. ${error.message}`); }
     }
   }
   const script = serviceScript();
@@ -193,33 +394,69 @@ async function ensureClient() {
   output.appendLine(`Starting Last Order backend: ${node} ${script} --project ${root}`);
   serviceProcess = cp.spawn(node, [script, '--project', root], {
     cwd: path.dirname(script),
-    env: process.env,
+    env: { ...process.env, LAST_ORDER_DISTRIBUTION_VERSION: expectedVersion },
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe']
   });
   ownsService = true;
   const info = await waitForReady(serviceProcess);
   client = new ControlClient(info);
+  ensureControlSubscription();
+  if (project) {
+    project.client = client; project.process = serviceProcess; project.owns = true; project.error = null;
+  }
   return client;
 }
 
 async function refreshState() {
-  if (!client || refreshing) return lastStatus;
+  if (!client) return lastStatus;
+  if (refreshing) { refreshQueued = true; return lastStatus; }
   refreshing = true;
   try {
     const status = await client.request('GET', '/status');
     lastStatus = status;
+    const project = projectCatalog.find(item => item.root === activeProjectRoot);
+    if (project) { project.status = status; project.client = client; project.error = null; }
     treeProvider?.setStatus(status);
     const visibleWorkers = Object.values(status.snapshot.workers || {}).filter(worker => !worker.archivedAt);
     statusBar.text = `$(radio-tower) LO: ${visibleWorkers.length}`;
-    statusBar.tooltip = 'Open Last Order Manager';
-    void handlePendingRequests(status);
+    statusBar.tooltip = `Open Last Order Manager${project ? ` · ${project.name}` : ''}`;
+    void managerWebviewProvider?.pushState(status);
+    for (const { provider } of workerMonitors.values()) void provider.pushState(status);
+    if (!managerWebviewProvider?.view) void handlePendingRequests(status);
     return status;
   } catch (error) {
     output.appendLine(`Last Order backend refresh failed: ${error.message}`);
     return lastStatus;
   } finally {
     refreshing = false;
+    if (refreshQueued) {
+      refreshQueued = false;
+      setImmediate(() => { void refreshState(); });
+    }
+  }
+}
+
+async function switchProject(root) {
+  for (const { panel } of workerMonitors.values()) panel.dispose();
+  if (!projectCatalog.length) await initializeProjectCatalog();
+  const project = projectCatalog.find(item => item.root === root || item.code === root);
+  if (!project) throw new Error(`Unknown project: ${root}`);
+  stopControlSubscription();
+  activeProjectRoot = project.root;
+  client = project.client ?? undefined;
+  serviceProcess = project.process ?? undefined;
+  ownsService = Boolean(project.owns);
+  lastStatus = project.status ?? undefined;
+  refreshing = false;
+  try {
+    await ensureClient();
+    const status = await refreshState();
+    await managerWebviewProvider?.pushState(status ?? lastStatus);
+    return { root: project.root, name: project.name, code: project.code };
+  } catch (error) {
+    project.error = error.message;
+    throw error;
   }
 }
 
@@ -266,281 +503,470 @@ async function pickWorker(title = 'Select worker') {
   return picked?.worker;
 }
 
-function managerTuiHtml(webview) {
+function nativeManagerHtml(webview) {
   const nonce = crypto.randomBytes(16).toString('hex');
-  const asset = relative => webview.asWebviewUri(vscode.Uri.file(path.join(extensionContext.extensionPath, relative))).toString();
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} 'nonce-${nonce}'; font-src ${webview.cspSource}; img-src data: ${webview.cspSource};">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="${asset('node_modules/@xterm/xterm/css/xterm.css')}">
-<style>
-  html, body, #terminal { width:100%; height:100%; margin:0; padding:0; overflow:hidden; background:var(--vscode-editor-background); }
-  #terminal { box-sizing:border-box; padding:6px; }
-  #overlay { position:fixed; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:10px; background:color-mix(in srgb, var(--vscode-editor-background) 92%, transparent); color:var(--vscode-foreground); font-family:var(--vscode-font-family); }
-  #overlay.visible { display:flex; }
-  button { color:var(--vscode-button-foreground); background:var(--vscode-button-background); border:0; padding:6px 12px; cursor:pointer; }
-  #attachmentDock { position:fixed; right:14px; bottom:66px; display:flex; flex-direction:column; align-items:flex-end; gap:8px; max-width:min(520px,80vw); pointer-events:none; }
-  #attachmentTray { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; pointer-events:auto; }
-  .attachment { position:relative; width:92px; padding:4px; border:1px solid var(--vscode-widget-border, #555); background:var(--vscode-editorWidget-background); border-radius:6px; }
-  .attachment img { display:block; width:82px; height:64px; object-fit:contain; background:var(--vscode-input-background); }
-  .attachment span { display:block; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:11px var(--vscode-font-family); color:var(--vscode-descriptionForeground); }
-  .attachment button { position:absolute; top:-7px; right:-7px; width:20px; height:20px; padding:0; border-radius:50%; font:12px/20px var(--vscode-font-family); }
-  #attachButton { pointer-events:auto; align-self:flex-end; opacity:.85; }
-</style>
-</head>
-<body>
-<div id="terminal"></div>
-<div id="attachmentDock"><div id="attachmentTray"></div><button id="attachButton" title="Attach images">Attach image</button></div>
-<div id="overlay"><span id="message">Last Order TUI stopped.</span><button id="restart">Restart TUI</button></div>
-<script nonce="${nonce}" src="${asset('node_modules/@xterm/xterm/lib/xterm.js')}"></script>
-<script nonce="${nonce}" src="${asset('node_modules/@xterm/addon-fit/lib/addon-fit.js')}"></script>
-<script nonce="${nonce}">
-  const vscode = acquireVsCodeApi();
-  const style = getComputedStyle(document.body);
-  const read = name => style.getPropertyValue(name).trim();
-  const terminal = new Terminal({
-    cursorBlink: true,
-    convertEol: false,
-    fontFamily: read('--vscode-editor-font-family') || 'Consolas, monospace',
-    fontSize: Math.max(11, Number(read('--vscode-editor-font-size').replace('px','')) || 13),
-    lineHeight: 1.15,
-    scrollback: 1000,
-    linkHandler: {
-      allowNonHttpProtocols: true,
-      activate: (_event, url) => vscode.postMessage({ type: 'openExternal', url })
-    },
-    theme: {
-      background: read('--vscode-editor-background') || '#1e1e1e',
-      foreground: read('--vscode-editor-foreground') || '#d4d4d4',
-      cursor: read('--vscode-editorCursor-foreground') || '#aeafad',
-      selectionBackground: read('--vscode-editor-selectionBackground') || '#264f78'
-    }
-  });
-  const fit = new FitAddon.FitAddon();
-  const attachmentTray = document.getElementById('attachmentTray');
-  let attachments = [];
-  const renderAttachments = next => {
-    attachments = next || [];
-    attachmentTray.replaceChildren(...attachments.map(attachment => {
-      const item = document.createElement('div'); item.className = 'attachment';
-      const image = document.createElement('img'); image.src = attachment.preview; image.alt = attachment.name;
-      const name = document.createElement('span'); name.textContent = attachment.name; name.title = attachment.path;
-      const remove = document.createElement('button'); remove.textContent = '×'; remove.title = 'Remove image';
-      remove.addEventListener('click', () => vscode.postMessage({ type: 'removeAttachment', path: attachment.path }));
-      item.append(image, name, remove); return item;
-    }));
-  };
-  document.getElementById('attachButton').addEventListener('click', () => vscode.postMessage({ type: 'pickImages' }));
-  terminal.loadAddon(fit);
-  terminal.open(document.getElementById('terminal'));
-  fit.fit();
-  terminal.focus();
-  terminal.attachCustomKeyEventHandler(event => {
-    if (event.type === 'keydown' && event.ctrlKey && !event.shiftKey && !event.altKey && event.key === 'Enter') {
-      vscode.postMessage({ type: 'newlineInput' });
-      event.preventDefault();
-      event.stopPropagation();
-      return false;
-    }
-    if (event.type === 'keydown' && event.ctrlKey && !event.altKey && (event.key === 'Tab' || event.code === 'Tab')) {
-      vscode.postMessage({ type: 'switchScreen' });
-      event.preventDefault();
-      event.stopPropagation();
-      return false;
-    }
-    if (event.type === 'keydown' && event.ctrlKey && !event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c' && terminal.hasSelection()) {
-      const text = terminal.getSelection();
-      if (text) {
-        vscode.postMessage({ type: 'copySelection', text });
-        terminal.clearSelection();
-        event.preventDefault();
-        event.stopPropagation();
-        return false;
-      }
-    }
-    return true;
-  });
-  window.addEventListener('keydown', event => {
-    if (event.ctrlKey && !event.altKey && (event.key === 'Tab' || event.code === 'Tab')) {
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      vscode.postMessage({ type: 'switchScreen' });
-    }
-  }, true);
-  window.addEventListener('focus', () => vscode.postMessage({ type: 'focusChanged', focused: true }));
-  window.addEventListener('blur', () => vscode.postMessage({ type: 'focusChanged', focused: false }));
-  document.addEventListener('visibilitychange', () => vscode.postMessage({ type: 'focusChanged', focused: !document.hidden }));
-  terminal.attachCustomWheelEventHandler(event => {
-    const button = event.deltaY < 0 ? 64 : 65;
-    vscode.postMessage({ type: 'input', data: \`\\x1b[<\${button};1;1M\` });
-    event.preventDefault();
-    event.stopPropagation();
-    return false;
-  });
-  const sendSize = () => vscode.postMessage({ type: 'resize', columns: terminal.cols, rows: terminal.rows });
-  terminal.onData(data => vscode.postMessage({ type: 'input', data }));
-  terminal.onResize(sendSize);
-  new ResizeObserver(() => { fit.fit(); sendSize(); }).observe(document.getElementById('terminal'));
-  document.getElementById('restart').addEventListener('click', () => {
-    document.getElementById('overlay').classList.remove('visible');
-    terminal.reset();
-    vscode.postMessage({ type: 'restart' });
-  });
-  window.addEventListener('message', event => {
-    const data = event.data;
-    if (data.type === 'output') terminal.write(data.data);
-    if (data.type === 'attachments') renderAttachments(data.attachments);
-    if (data.type === 'exit') {
-      document.getElementById('message').textContent = data.message || 'Last Order TUI stopped.';
-      document.getElementById('overlay').classList.add('visible');
-    }
-  });
-  requestAnimationFrame(() => { fit.fit(); sendSize(); terminal.focus(); });
-</script>
-</body>
-</html>`;
+  const resource = relative => webview.asWebviewUri(
+    vscode.Uri.file(path.join(extensionContext.extensionPath, 'webview', relative))
+  ).toString();
+  const csp = [
+    "default-src 'none'",
+    `img-src data: ${webview.cspSource}`,
+    `style-src ${webview.cspSource} 'unsafe-inline'`,
+    `script-src 'nonce-${nonce}'`,
+    `font-src ${webview.cspSource}`
+  ].join('; ');
+  return fs.readFileSync(path.join(extensionContext.extensionPath, 'webview', 'manager.html'), 'utf8')
+    .replaceAll('__CSP__', csp)
+    .replaceAll('__STYLE__', resource('style.css'))
+    .replaceAll('__SCRIPT__', resource('app.js'))
+    .replaceAll('__NONCE__', nonce)
+    .replace('__UI_RUNTIME__', () => buildUiRuntime(relative => fs.readFileSync(backendFile(relative), 'utf8'),
+      JSON.parse(fs.readFileSync(path.join(extensionContext.extensionPath, 'package.json'), 'utf8')).version).replace(/<\/script/gi, '<\\/script'));
 }
 
-function filterTerminalSelection(text) {
-  return String(text ?? '').split(/\r?\n/).map(line => line
-    .replace(/^[╭├]─\s*/, '')
-    .replace(/^│\s?/, '')
-    .replace(/\s*─*[╮┤]$/, '')
-    .replace(/\s*│$/, '')
-  ).filter(line => !/^[\s╭╮╰╯─│├┤┬┴┼]+$/u.test(line))
-    .join('\n').replace(/\n{3,}/g, '\n\n').trim();
-}
+class ManagerWebviewProvider {
+  constructor() {
+    this.view = null;
+    this.attachments = [];
+    this.currentTab = 'manager';
+    this.pushing = null;
+    this.pendingStatus = null;
+    this.initializing = null;
+    this.initialized = false;
+    this.pendingWorkerId = null;
+    this.lastStateSignature = null;
+  }
 
-class ManagerTuiViewProvider {
-  constructor() { this.view = null; this.host = null; this.attachments = []; }
   resolveWebviewView(view) {
     this.view = view;
+    this.lastStateSignature = null;
     view.webview.options = {
       enableScripts: true,
-      localResourceRoots: [vscode.Uri.file(path.join(extensionContext.extensionPath, 'node_modules'))]
+      localResourceRoots: [vscode.Uri.file(path.join(extensionContext.extensionPath, 'webview'))]
     };
-    view.webview.html = managerTuiHtml(view.webview);
-    view.webview.onDidReceiveMessage(message => this.message(message));
-    view.onDidDispose(() => this.stopHost());
-    void this.startHost();
+    view.webview.html = nativeManagerHtml(view.webview);
+    view.webview.onDidReceiveMessage(message => void this.message(message));
+    view.onDidDispose(() => this.dispose());
+    void this.initialize();
   }
-  message(message) {
-    if (message.type === 'restart') { this.stopHost(); setTimeout(() => void this.startHost(), 100); return; }
-    if (message.type === 'copySelection') {
-      void vscode.env.clipboard.writeText(filterTerminalSelection(message.text));
-      return;
-    }
-    if (message.type === 'openExternal') {
-      void openExternalLink(message.url);
-      return;
-    }
-    if (message.type === 'switchScreen') {
-      if (this.host?.connected) this.host.stdin.write(JSON.stringify({ type: 'switchScreen' }) + '\n');
-      return;
-    }
-    if (message.type === 'focusChanged') {
-      void vscode.commands.executeCommand('setContext', 'missionControl.managerFocus', Boolean(message.focused));
-      return;
-    }
-    if (message.type === 'pickImages') {
-      void this.pickImages().catch(error => vscode.window.showErrorMessage(`Attach image failed: ${error.message}`));
-      return;
-    }
-    if (message.type === 'removeAttachment') {
-      this.attachments = this.attachments.filter(attachment => attachment.path !== message.path);
-      this.syncAttachments();
-      return;
-    }
-    if (message.type === 'submitInput') {
-      if (this.host?.connected) this.host.stdin.write(JSON.stringify({ type: 'submitInput' }) + '\n');
-      return;
-    }
-    if (message.type === 'newlineInput') {
-      if (this.host?.connected) this.host.stdin.write(JSON.stringify({ type: 'newlineInput' }) + '\n');
-      return;
-    }
-    if (!this.host?.connected) return;
-    if (message.type === 'input') this.host.stdin.write(JSON.stringify({ type: 'input', data: message.data }) + '\n');
-    if (message.type === 'resize') this.host.stdin.write(JSON.stringify({ type: 'resize', columns: message.columns, rows: message.rows }) + '\n');
+
+  post(message) {
+    this.view?.webview.postMessage(message);
   }
-  syncAttachments() {
-    this.view?.webview.postMessage({ type: 'attachments', attachments: this.attachments });
-    if (this.host?.connected) {
-      this.host.stdin.write(JSON.stringify({
-        type: 'attachments',
-        attachments: this.attachments.map(({ preview, ...attachment }) => attachment)
-      }) + '\n');
-    }
-  }
-  async pickImages() {
-    const uris = await vscode.window.showOpenDialog({
-      canSelectMany: true,
-      openLabel: 'Attach images',
-      filters: { Images: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }
+
+  publicAttachments(includePreview = false) {
+    return this.attachments.map(attachment => {
+      if (includePreview) return attachment;
+      const { preview, ...metadata } = attachment;
+      return metadata;
     });
-    if (!uris?.length) return;
-    for (const uri of uris.slice(0, 8)) {
-      if (this.attachments.length >= 8) break;
-      const filePath = uri.fsPath;
-      const mime = IMAGE_MIME[path.extname(filePath).toLowerCase()];
-      if (!mime || this.attachments.some(attachment => attachment.path === filePath)) continue;
-      const info = await fsp.stat(filePath);
-      if (!info.isFile() || info.size > MAX_IMAGE_BYTES) continue;
-      const preview = `data:${mime};base64,${(await fsp.readFile(filePath)).toString('base64')}`;
-      this.attachments.push({ name: path.basename(filePath), path: filePath, mime, size: info.size, preview });
-    }
-    this.syncAttachments();
   }
-  async startHost() {
-    if (this.host || !this.view) return;
-    await ensureClient();
-    const root = workspaceRoot();
-  const script = backendFile('bin/tui-webview-host.js');
-    this.host = cp.fork(script, ['--project', root], {
-      execPath: nodeExecutable(), cwd: path.dirname(script), env: process.env,
-      windowsHide: true, stdio: ['pipe', 'pipe', 'pipe', 'ipc']
-    });
-    const host = this.host;
-    host.stdout.on('data', chunk => this.view?.webview.postMessage({ type: 'output', data: chunk.toString() }));
-    host.stderr.on('data', chunk => output.append(chunk.toString()));
-    host.on('message', message => {
-      if (message.type === 'openMonitor') void openMonitor(message.worker, message);
-      if (message.type === 'disconnected') this.view?.webview.postMessage({ type: 'exit', message: 'Last Order backend disconnected.' });
-      if (message.type === 'attachmentsConsumed') {
-        this.attachments = [];
-        this.view?.webview.postMessage({ type: 'attachments', attachments: [] });
+
+  async initialize() {
+    if (this.initialized) {
+      await this.pushState(lastStatus);
+      return;
+    }
+    if (this.initializing) return this.initializing;
+    this.initializing = (async () => {
+      try {
+        await ensureClient();
+        await refreshState();
+        await this.pushState(lastStatus);
+        this.initialized = true;
+      } catch (error) {
+        output.appendLine(`Last Order native Webview failed: ${error.stack || error.message}`);
+        this.post({ type: 'fatal', message: error.message });
+      } finally {
+        this.initializing = null;
       }
-    });
-    host.on('exit', code => {
-      if (this.host === host) this.host = null;
-      this.view?.webview.postMessage({ type: 'exit', message: code === 42 ? 'Last Order reloaded.' : 'Last Order TUI stopped.' });
-      if (code === 42) setTimeout(() => void this.reloadWindow(), 800);
-    });
+    })();
+    return this.initializing;
   }
-  async reloadWindow() {
+
+  async pushState(status = lastStatus) {
+    if (!this.view || !client) return;
+    if (status) this.pendingStatus = status;
+    if (this.pushing) return this.pushing;
+    this.pushing = (async () => {
+      while (this.pendingStatus) {
+        const current = this.pendingStatus;
+        this.pendingStatus = null;
+        const history = await client.request('GET', '/history?actor=manager&limit=400');
+        const signature = JSON.stringify({
+          snapshot: current.snapshot,
+          config: current.config,
+          project_root: current.project_root,
+          projects: projectSnapshot(),
+          history: crypto.createHash('sha1').update(JSON.stringify(history.events)).digest('hex')
+        });
+        if (signature === this.lastStateSignature) continue;
+        this.lastStateSignature = signature;
+        this.post({
+          type: 'state',
+          status: current,
+          history: history.events,
+          projects: projectSnapshot(),
+          attachments: this.publicAttachments()
+        });
+      }
+    })().finally(() => {
+      this.pushing = null;
+      if (this.pendingStatus) void this.pushState(this.pendingStatus);
+    });
+    return this.pushing;
+  }
+
+  async afterMutation() {
+    await refreshState();
+    await this.pushState(lastStatus);
+  }
+
+  async pasteImages(images) {
+    for (const image of (Array.isArray(images) ? images : []).slice(0, 8)) {
+      if (this.attachments.length >= 8) {
+        this.post({ type: 'toast', message: '最多同时添加 8 张图片', kind: 'error' });
+        break;
+      }
+      try {
+        const attachment = await writePastedImage(image);
+        if (!this.attachments.some(item => item.path === attachment.path)) this.attachments.push(attachment);
+      } catch (error) {
+        output?.appendLine(`Last Order image paste rejected: ${error.message}`);
+        this.post({ type: 'toast', message: error.message, kind: 'error' });
+      }
+    }
+    this.post({ type: 'attachments', attachments: this.publicAttachments(true) });
+  }
+
+  async api(message) {
     try {
-      await extensionContext.workspaceState?.update?.('missionControl.reloadRequested', true);
-      await vscode.commands.executeCommand('workbench.action.reloadWindow');
-    } catch {
-      await this.startHost();
+      let value;
+      const workerId = message.workerId;
+      const worker = workerId ? workerById(workerId) : undefined;
+      switch (message.action) {
+        case 'refresh':
+          if (!this.initialized) {
+            await this.initialize();
+            if (!this.initialized) throw new Error('Last Order could not connect. Check the Last Order output for details.');
+          } else await this.afterMutation();
+          value = { ok: true };
+          break;
+        case 'sendManager':
+          await client.request('POST', '/manager/message', {
+            text: message.text,
+            interrupt: Boolean(message.interrupt),
+            quotes: message.quotes ?? [],
+            attachments: this.attachments.map(({ preview, ...attachment }) => attachment)
+          });
+          this.attachments = [];
+          await this.afterMutation();
+          this.post({ type: 'attachments', attachments: [] });
+          value = { ok: true };
+          break;
+        case 'interruptManager':
+          value = await client.request('POST', '/manager/interrupt', {});
+          await this.afterMutation();
+          break;
+        case 'sendWorker':
+          await client.request('POST', `/worker/${encodeURIComponent(message.workerId)}/message`, { text: message.text });
+          await this.afterMutation();
+          value = { ok: true };
+          break;
+        case 'controlWorker':
+          await client.request('POST', `/worker/${encodeURIComponent(message.workerId)}/control`, {
+            action: message.workerAction, reason: message.reason || ''
+          });
+          await this.afterMutation();
+          value = { ok: true };
+          break;
+        case 'approval':
+          await client.request('POST', `/approval/${encodeURIComponent(message.approvalId)}`, { allowed: Boolean(message.allowed) });
+          await this.afterMutation();
+          value = { ok: true };
+          break;
+        case 'question':
+          await client.request('POST', `/question/${encodeURIComponent(message.questionId)}`, { answer: message.answer });
+          await this.afterMutation();
+          value = { ok: true };
+          break;
+        case 'clearMemory':
+          value = await client.request('POST', '/manager/memory/clear', {});
+          await this.afterMutation();
+          break;
+        case 'version':
+          value = {
+            version: client.info.version,
+            protocol: client.info.protocol,
+            pid: client.info.pid,
+            started_at: client.info.started_at,
+            node: process.version,
+            platform: process.platform,
+            arch: process.arch,
+            project_root: client.info.project_root,
+            codex_command: process.env.LO_CODEX_COMMAND || ''
+          };
+          break;
+        case 'saveConfig':
+          value = await client.request('POST', '/config', { config: message.config || {} });
+          break;
+        case 'restoreCheckpoint':
+          await restoreCheckpoint();
+          value = { ok: true };
+          break;
+        case 'reloadWindow':
+          await vscode.commands.executeCommand('workbench.action.reloadWindow');
+          value = { ok: true };
+          break;
+        case 'workerNotes':
+          if (!worker) throw new Error('Unknown worker');
+          await client.request('POST', `/worker/${encodeURIComponent(worker.id)}/notes`, { notes: message.notes || [] });
+          await this.afterMutation();
+          value = { ok: true };
+          break;
+        case 'takeOver':
+          if (!worker) throw new Error('Unknown worker');
+          await takeOverWorker(worker);
+          value = { ok: true };
+          break;
+        case 'handBack':
+          if (!worker) throw new Error('Unknown worker');
+          await handBackWorker(worker);
+          value = { ok: true };
+          break;
+        case 'history':
+          value = await client.request('GET', `/history?actor=${encodeURIComponent(message.actor || 'manager')}&limit=${Math.max(1, Math.min(500, Number(message.limit) || 400))}`);
+          break;
+        case 'files':
+          if (!worker) throw new Error('Unknown worker');
+          try {
+            value = { path: message.path || '', files: await client.git.files(worker, message.path || '') };
+          } catch (error) {
+            if (!message.path) throw error;
+            value = { path: message.path, files: await client.git.content(worker, message.path, 'worktree') };
+          }
+          break;
+        case 'diff':
+          if (!worker) throw new Error('Unknown worker');
+          value = { diff: await client.git.diff(worker, message.mode || 'task') };
+          break;
+        case 'changedFiles':
+          if (!worker) throw new Error('Unknown worker');
+          value = { files: await client.git.changedFiles(worker) };
+          break;
+        case 'content':
+          if (!worker) throw new Error('Unknown worker');
+          value = { content: await client.git.content(worker, message.path || '', message.ref || 'worktree') };
+          break;
+        case 'turns':
+          value = await client.request('GET', `/conversation/turns?actor=${encodeURIComponent(message.actor || 'manager')}&limit=${Math.max(1, Math.min(100, Number(message.limit) || 50))}`);
+          break;
+        case 'forkConversation':
+          value = await client.request('POST', '/conversation/fork', {
+            actor: message.actor || 'manager',
+            lastTurnId: message.lastTurnId
+          });
+          await this.afterMutation();
+          break;
+        case 'revertConversation':
+          value = await client.request('POST', '/conversation/revert', {
+            actor: message.actor || 'manager',
+            beforeTurnId: message.beforeTurnId
+          });
+          await this.afterMutation();
+          break;
+        case 'checkpoints':
+          value = await client.request('GET', '/checkpoints');
+          break;
+        case 'restoreCheckpointById':
+          value = await client.request('POST', `/checkpoints/${encodeURIComponent(message.checkpointId)}/restore`, {
+            files: message.mode !== 'conversation',
+            conversation: message.mode !== 'files'
+          });
+          await this.afterMutation();
+          break;
+        case 'skills':
+          value = await client.request('GET', `/skills?actor=${encodeURIComponent(message.actor || 'manager')}&forceReload=${message.forceReload === false ? 'false' : 'true'}`);
+          break;
+        case 'conversationEvent':
+          value = await client.request('GET', `/conversation/event?actor=${encodeURIComponent(message.actor || 'manager')}&seq=${encodeURIComponent(message.seq)}`);
+          break;
+        case 'openWorkerFile':
+          if (!worker) throw new Error('Unknown worker');
+          await vscode.commands.executeCommand('vscode.open', vscode.Uri.from({
+            scheme: 'mission-control',
+            path: '/' + String(message.path || '').replace(/^\/+/, ''),
+            query: new URLSearchParams({ worker: worker.id, ref: message.ref || 'worktree' }).toString()
+          }));
+          value = { ok: true };
+          break;
+        case 'openWorkerDiff':
+          if (!worker) throw new Error('Unknown worker');
+          await openWorkerDiff(worker);
+          value = { ok: true };
+          break;
+        case 'editorContext': {
+          const editor = vscode.window.activeTextEditor;
+          if (!editor) throw new Error('Open an editor file first');
+          const selection = editor.selection;
+          const selectedText = selection.isEmpty ? editor.document.getText() : editor.document.getText(selection);
+          if (!selectedText) throw new Error('The editor context is empty');
+          const range = selection.isEmpty
+            ? 'whole file'
+            : `${selection.start.line + 1}:${selection.start.character + 1}-${selection.end.line + 1}:${selection.end.character + 1}`;
+          value = {
+            text: `[VSCode context]\nFile: ${editor.document.uri.fsPath}\nLanguage: ${editor.document.languageId}\nSelection: ${range}\n\n\`\`\`${editor.document.languageId}\n${selectedText.slice(0, 100_000)}\n\`\`\`\n`
+          };
+          break;
+        }
+        case 'switchProject':
+          value = await switchProject(message.root);
+          break;
+        case 'createCheckpoint':
+          value = await client.request('POST', '/checkpoints', { label: message.label || '' });
+          break;
+        case 'archiveWorker':
+          if (!worker) throw new Error('Unknown worker');
+          value = await client.request('POST', `/worker/${encodeURIComponent(worker.id)}/archive`, { reason: 'user' });
+          await this.afterMutation();
+          break;
+        case 'monitorWorker':
+          if (!worker) throw new Error('Unknown worker');
+          openWorkerMonitor(worker);
+          value = { ok: true };
+          break;
+        case 'closeView':
+          this.post({ type: 'apiResult', id: message.id, value: { ok: true } });
+          if (this.isMonitor) this.view?.dispose();
+          else await vscode.commands.executeCommand('workbench.action.closeSidebar');
+          return;
+        case 'shutdown':
+          await client.request('POST', '/shutdown');
+          for (const project of projectCatalog) {
+            if (project.root === activeProjectRoot) { project.client = null; project.status = null; }
+          }
+          await stopMissionControl();
+          value = { ok: true };
+          break;
+        default:
+          throw new Error(`Unknown Webview API action: ${message.action}`);
+      }
+      this.post({ type: 'apiResult', id: message.id, value });
+    } catch (error) {
+      this.post({ type: 'apiResult', id: message.id, error: error.message });
     }
   }
-  stopHost() {
-    if (!this.host) return;
-    const host = this.host;
-    this.attachments = [];
-    this.view?.webview.postMessage({ type: 'attachments', attachments: [] });
-    this.host = null;
-    try { host.disconnect(); } catch {}
-    try { host.kill(); } catch {}
+
+  async message(message) {
+    try {
+      if (message.type === 'ready') {
+        this.lastStateSignature = null;
+        await this.initialize();
+        if (this.pendingWorkerId) this.post({ type: 'openWorker', workerId: this.pendingWorkerId });
+        return;
+      }
+      if (message.type === 'api') {
+        await this.api(message);
+        return;
+      }
+      if (message.type === 'tabChanged') {
+        this.currentTab = message.tab === 'workers' ? 'workers' : 'manager';
+        return;
+      }
+      if (message.type === 'focusChanged') {
+        await vscode.commands.executeCommand('setContext', 'missionControl.managerFocus', Boolean(message.focused));
+        return;
+      }
+      if (message.type === 'openExternal') {
+        await openExternalLink(message.url);
+        return;
+      }
+      if (message.type === 'copyText') {
+        await vscode.env.clipboard.writeText(String(message.text ?? ''));
+        return;
+      }
+      if (message.type === 'pasteImages') {
+        await this.pasteImages(message.images);
+        return;
+      }
+      if (message.type === 'removeAttachment') {
+        this.attachments = this.attachments.filter(attachment => attachment.path !== message.path);
+        this.post({ type: 'attachments', attachments: this.publicAttachments() });
+        return;
+      }
+      if (message.type === 'sendManager') {
+        await client.request('POST', '/manager/message', {
+          text: message.text,
+          quotes: message.quotes ?? [],
+          attachments: this.attachments.map(({ preview, ...attachment }) => attachment)
+        });
+        this.attachments = [];
+        await this.afterMutation();
+        this.post({ type: 'attachments', attachments: [] });
+        return;
+      }
+      if (message.type === 'interruptManager') {
+        await client.request('POST', '/manager/interrupt', {});
+        await this.afterMutation();
+        return;
+      }
+      if (message.type === 'sendWorker') {
+        await client.request('POST', `/worker/${encodeURIComponent(message.workerId)}/message`, { text: message.text });
+        await this.afterMutation();
+        return;
+      }
+      if (message.type === 'controlWorker') {
+        await client.request('POST', `/worker/${encodeURIComponent(message.workerId)}/control`, {
+          action: message.action, reason: message.reason || ''
+        });
+        await this.afterMutation();
+        return;
+      }
+      if (message.type === 'approval') {
+        await client.request('POST', `/approval/${encodeURIComponent(message.id)}`, { allowed: Boolean(message.allowed) });
+        await this.afterMutation();
+        return;
+      }
+      if (message.type === 'question') {
+        await client.request('POST', `/question/${encodeURIComponent(message.id)}`, { answer: message.answer });
+        await this.afterMutation();
+        return;
+      }
+    } catch (error) {
+      output.appendLine(`Last Order Webview action failed: ${error.stack || error.message}`);
+      this.post({ type: 'toast', message: error.message, kind: 'error' });
+    }
   }
+
   switchScreen() {
-    if (this.host?.connected) this.host.stdin.write(JSON.stringify({ type: 'switchScreen' }) + '\n');
+    this.currentTab = this.currentTab === 'manager' ? 'workers' : 'manager';
+    this.post({ type: 'switchTab', tab: this.currentTab });
   }
+
+  openWorker(workerId) {
+    this.pendingWorkerId = workerId;
+    this.post({ type: 'openWorker', workerId });
+  }
+
+  dispose() {
+    this.view = null;
+    this.attachments = [];
+    this.pendingStatus = null;
+    this.initialized = false;
+    this.lastStateSignature = null;
+  }
+}
+
+function openWorkerMonitor(worker) {
+  const existing = workerMonitors.get(worker.id);
+  if (existing) { existing.panel.reveal(vscode.ViewColumn.Beside); return; }
+  const panel = vscode.window.createWebviewPanel('missionControl.workerMonitor', worker.title || worker.id, vscode.ViewColumn.Beside, { enableScripts: true });
+  const provider = new ManagerWebviewProvider();
+  provider.isMonitor = true;
+  provider.pendingWorkerId = worker.id;
+  workerMonitors.set(worker.id, { panel, provider });
+  panel.onDidDispose(() => workerMonitors.delete(worker.id));
+  provider.resolveWebviewView(panel);
 }
 
 async function openExternalLink(value) {
@@ -558,7 +984,7 @@ async function openExternalLink(value) {
     return;
   }
   if (/^[a-z][a-z0-9+.-]*:/i.test(target) && !/^[A-Za-z]:[\\/]/.test(target)) return;
-  const root = workspaceRoot();
+  const root = lastStatus?.project_root ?? workspaceRoot();
   const [targetPath, anchor] = target.split('#');
   const cleaned = targetPath.replace(/^\.\//, '');
   const file = path.isAbsolute(cleaned) ? path.resolve(cleaned) : path.resolve(root, cleaned);
@@ -589,31 +1015,13 @@ async function openManager() {
 
 async function openWorker(worker) {
   worker = worker || await pickWorker('Open worker');
-  if (worker) await openMonitor(worker);
-}
-
-async function openTui() {
-  await ensureClient();
-  if (tuiTerminal) { tuiTerminal.show(); return; }
-  const root = workspaceRoot();
-  const script = backendFile('bin/last-order.js');
-  tuiTerminal = vscode.window.createTerminal({
-    name: 'Last Order',
-    cwd: root,
-    location: { viewColumn: vscode.ViewColumn.Beside },
-    shellPath: nodeExecutable(),
-    shellArgs: [script, '--project', root]
-  });
-  const terminal = tuiTerminal;
-  const disposable = terminal.onDidClose?.(() => {
-    if (tuiTerminal === terminal) tuiTerminal = undefined;
-    disposable?.dispose?.();
-  });
-  terminal.show();
+  if (!worker) return;
+  await openManager();
+  managerWebviewProvider?.openWorker(worker.id);
 }
 
 async function switchLastOrderScreen() {
-  if (managerTuiProvider?.host?.connected) managerTuiProvider.switchScreen();
+  if (managerWebviewProvider?.view) managerWebviewProvider.switchScreen();
   else await openManager();
 }
 
@@ -771,7 +1179,7 @@ class WorkerTreeProvider {
       item.tooltip = `${worker.id}\n${worker.notes?.join('\n') || ''}`;
       item.iconPath = new vscode.ThemeIcon(worker.status === 'running' ? 'sync~spin' : worker.status === 'failed' ? 'error' : 'circle-outline');
       item.contextValue = 'missionControl.worker';
-      item.command = { command: 'missionControl.openMonitor', title: 'Open Worker Monitor', arguments: [worker] };
+    item.command = { command: 'missionControl.openWorker', title: 'Open Worker', arguments: [worker] };
       item.worker = worker;
       items.push(item);
     }
@@ -798,16 +1206,28 @@ async function startMissionControl() {
 }
 
 async function stopMissionControl() {
-  if (client) {
-    try { await client.request('POST', '/shutdown'); }
-    catch { serviceProcess?.kill(); }
-  } else serviceProcess?.kill();
+  for (const { panel } of workerMonitors.values()) panel.dispose();
+  for (const project of projectCatalog) {
+    if (!project.owns) continue;
+    if (project.client) {
+      try { await project.client.request('POST', '/shutdown'); }
+      catch { project.process?.kill(); }
+    } else project.process?.kill();
+    project.client = null;
+    project.process = null;
+    project.owns = false;
+    project.status = null;
+  }
   client = undefined;
+  stopControlSubscription();
   serviceProcess = undefined;
   ownsService = false;
-  managerTuiProvider?.stopHost();
-  tuiTerminal?.dispose?.();
-  tuiTerminal = undefined;
+  if (managerWebviewProvider) {
+    managerWebviewProvider.initialized = false;
+    managerWebviewProvider.lastStateSignature = null;
+    managerWebviewProvider.pendingStatus = null;
+    managerWebviewProvider.post({ type: 'fatal', message: 'Last Order stopped. Use /refresh to reconnect.' });
+  }
   lastStatus = undefined;
   treeProvider?.setStatus({ snapshot: { workers: {} }, config: {} });
   statusBar.text = '$(radio-tower) LO: off';
@@ -844,23 +1264,6 @@ async function sendContext(target) {
   await refreshState();
 }
 
-async function openMonitor(worker, projectInfo) {
-  worker = worker || await pickWorker('Open worker monitor');
-  if (!worker) return;
-  const status = projectInfo?.dataDirectory
-    ? { project_root: projectInfo.project, data_directory: projectInfo.dataDirectory }
-    : lastStatus || await refreshState();
-  const script = backendFile('bin/worker-monitor.js');
-  const terminal = vscode.window.createTerminal({
-    name: `LO ${worker.id}`,
-    cwd: status.project_root,
-    shellPath: nodeExecutable(),
-    shellArgs: [script, '--data-directory', status.data_directory, '--worker', worker.id],
-    location: { viewColumn: vscode.ViewColumn.Beside }
-  });
-  terminal.show();
-}
-
 async function archiveWorker(item) {
   const worker = item?.worker ?? await pickWorker('Archive worker');
   if (!worker) return;
@@ -882,6 +1285,8 @@ async function activate(context) {
   statusBar.command = 'missionControl.openManager';
   statusBar.text = '$(radio-tower) LO: off';
   statusBar.show();
+  try { await initializeProjectCatalog(); }
+  catch (error) { output.appendLine(`Project discovery failed: ${error.message}`); }
   const contentChanged = new vscode.EventEmitter();
   const contentProvider = {
     onDidChange: contentChanged.event,
@@ -895,13 +1300,12 @@ async function activate(context) {
   };
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('mission-control', contentProvider));
   context.subscriptions.push(contentChanged);
-  managerTuiProvider = new ManagerTuiViewProvider();
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider('missionControl.manager', managerTuiProvider));
+  managerWebviewProvider = new ManagerWebviewProvider();
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider('missionControl.manager', managerWebviewProvider));
   context.subscriptions.push(output, statusBar, vscode.window.registerTreeDataProvider('missionControl.workers', treeProvider));
   context.subscriptions.push(registerCommand('missionControl.start', startMissionControl));
   context.subscriptions.push(registerCommand('missionControl.stop', stopMissionControl));
   context.subscriptions.push(registerCommand('missionControl.refresh', refreshState));
-  context.subscriptions.push(registerCommand('missionControl.openTui', openTui));
   context.subscriptions.push(registerCommand('missionControl.openManager', openManager));
   context.subscriptions.push(registerCommand('missionControl.openWorker', openWorker));
   context.subscriptions.push(registerCommand('missionControl.openWorkerDiff', openWorkerDiff));
@@ -914,7 +1318,6 @@ async function activate(context) {
     worker = worker || await pickWorker('Open worker worktree');
     if (worker) await openWorktree(worker);
   }));
-  context.subscriptions.push(registerCommand('missionControl.openMonitor', openMonitor));
   context.subscriptions.push(registerCommand('missionControl.sendContext', sendContext));
   context.subscriptions.push(registerCommand('missionControl.switchScreen', switchLastOrderScreen));
   context.subscriptions.push(registerCommand('missionControl.archiveWorker', archiveWorker));
@@ -931,18 +1334,24 @@ async function activate(context) {
   if (reloadRequested) await extensionContext.workspaceState?.update?.('missionControl.reloadRequested', false);
   if (reloadRequested || vscode.workspace.getConfiguration('missionControl').get('autoStart', false)) await startMissionControl();
   if (reloadRequested && !vscode.workspace.getConfiguration('missionControl').get('autoOpenManager', true)) await openManager();
-  if (!reloadRequested && vscode.workspace.getConfiguration('missionControl').get('autoOpenTui', false)) await openTui();
 }
 
 async function deactivate() {
+  for (const { panel } of workerMonitors.values()) panel.dispose();
+  stopControlSubscription();
   gitDiffViewer?.deactivate?.();
   gitDiffViewer = undefined;
   clearInterval(refreshTimer);
-  managerTuiProvider?.stopHost();
+  managerWebviewProvider?.dispose();
   const keepRunning = vscode.workspace.getConfiguration('missionControl').get('keepRunningOnDeactivate', false);
-  if (!keepRunning && ownsService && client) {
-    try { await client.request('POST', '/shutdown'); } catch { serviceProcess?.kill(); }
+  if (!keepRunning) {
+    for (const project of projectCatalog) {
+      if (!project.owns) continue;
+      if (project.client) {
+        try { await project.client.request('POST', '/shutdown'); } catch { project.process?.kill(); }
+      } else project.process?.kill();
+    }
   }
 }
 
-module.exports = { activate, deactivate, filterTerminalSelection, openExternalLink };
+module.exports = { activate, deactivate, discoverProjectRoots, openExternalLink, writePastedImage };

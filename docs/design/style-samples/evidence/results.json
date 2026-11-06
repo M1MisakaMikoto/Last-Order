@@ -1,0 +1,526 @@
+{
+  "evidence": "Native DOM vs original TUI using identical snapshots; provider and VS Code host acceptance separate",
+  "cases": [
+    {
+      "name": "manager",
+      "width": 1200,
+      "columns": 154,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "single-project-idle",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "manager-680",
+      "width": 680,
+      "columns": 87,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "manager-504",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "manager-320",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "empty",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "connecting",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "fatal",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "busy",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "interrupted",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "error",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "long",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "approvals",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "questions",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "light",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "contrast",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "large-font",
+      "width": 320,
+      "columns": 29,
+      "rows": 33,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "files",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "files",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "git",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "git",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "settings",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "settings",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "commands",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "help",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "turns",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "checkpoints",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "skills",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "help",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "version",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "help",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "quote",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "no-hints",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "projects",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "epoch",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-empty",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-mixed",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "no-workspace",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "files",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "archived",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "files-empty",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "files",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "files-error",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "files",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "git-empty",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "git",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "git-large",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "git",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "git-error",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "git",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "skills-error",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "turns-error",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "long-prompt",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "settings",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "keyboard-worker",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "git",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-expanded",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "approval-detail",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "request",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "question-detail",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "request",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "help-original-content",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "help",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "skills-content-with-paths",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "help",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "project-window-scrolled",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "project-switched",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "manager",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "file-content",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "files",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-rich-tool",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-selection-visible",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-resized-1200",
+      "width": 1200,
+      "columns": 154,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-resized-320",
+      "width": 320,
+      "columns": 40,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-resized-504",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    },
+    {
+      "name": "worker-long-message",
+      "width": 504,
+      "columns": 64,
+      "rows": 46,
+      "panel": "chat",
+      "headerMatches": true,
+      "contentMatches": true
+    }
+  ],
+  "keyboardAndCommands": "completion, shared input, history, F1–F6, Ctrl+Tab, scroll, routing, interrupt, quote, request detail, approve/deny/answer, settings, help, checkpoints, restore, turns/fork/revert, skills, project window/switch/routing, file content, attachments, typing during send, duplicate submit, send failure",
+  "performance": {
+    "updates": 20,
+    "history": 107,
+    "milliseconds": 274,
+    "retained": true,
+    "selectionRetained": true
+  }
+}

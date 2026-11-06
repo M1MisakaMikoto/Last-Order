@@ -7,7 +7,7 @@ import { discoverGitRepositories, projectCode } from '../src/core/projects.js';
 import { MultiProjectService } from '../src/core/multi-project-service.js';
 import { temporary, cleanup } from './helpers.js';
 
-test('workspace scanning discovers Git repositories and assigns stable project codes', async t => {
+test('workspace scanning discovers only direct child Git repositories and assigns stable project codes', async t => {
   const root = await temporary('projects-');
   t.after(() => cleanup(root));
   for (const name of ['beta', 'alpha', 'nested/gamma']) {
@@ -17,7 +17,7 @@ test('workspace scanning discovers Git repositories and assigns stable project c
   }
   const repositories = await discoverGitRepositories(root);
   assert.deepEqual(repositories.map(repository => [repository.code, path.basename(repository.root)]), [
-    ['A', 'alpha'], ['B', 'beta'], ['C', 'gamma']
+    ['A', 'alpha'], ['B', 'beta']
   ]);
   assert.equal(projectCode(0), 'A');
   assert.equal(projectCode(25), 'Z');

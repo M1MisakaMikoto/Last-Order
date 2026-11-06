@@ -9,3 +9,4 @@ export const WORKTREE_DIRECTORY_NAME = '.last-order-workspaces';
 export const LEGACY_WORKTREE_DIRECTORY_NAME = '.lastorder-workspaces';
 export const BRANCH_PREFIX = 'last-order';
 export const LEGACY_BRANCH_PREFIX = 'lastorder';
+export const CONTROL_PROTOCOL_VERSION = 2;

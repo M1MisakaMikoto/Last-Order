@@ -6,7 +6,7 @@ Last Order 鏄?Windows 涓婄殑 coding-agent 宸ヤ綔鍖猴紝涓€涓?manage
 褰撳墠鐗堟湰鎻愪緵鍙繍琛岀殑璋冨害绯荤粺涓?TUI銆佸洓绫诲師鐢熷崗璁€傞厤鍣ㄥ拰鑷姩鍖栨祴璇曘€傚簲鐢ㄥ彧杩炴帴閫夊畾鐨勭湡瀹?CLI锛屾部鐢ㄥ叾鐧诲綍涓庢ā鍨嬮厤缃€侰odex 鐨勭湡瀹?manager 鈫?瀹炵幇 worker 鈫?鐙珛楠屾敹 鈫?浜や粯鍒嗘敮闂幆宸茶窇閫氾紱鍏朵粬涓夌被鐨勭湡瀹炴ā鍨嬮棴鐜殏鏈畬鎴愩€?
 ## Multi-project workspace
 
-Open a workspace root such as `D:/workspaces`. Last Order scans Git repositories, labels them `-A`, `-B`, and so on, shows up to three projects with `Alt+Up/Down` scrolling, and routes `-A message` or `-B message` to the selected project using Tab completion.
+Open a workspace root such as `D:/workspaces`. Last Order checks the root and its direct child directories for Git repositories without scanning deeper, labels them `-A`, `-B`, and so on, shows up to three projects with `Alt+Up/Down` scrolling, and routes `-A message` or `-B message` to the selected project using Tab completion.
 
 The Last Order activity-bar container also includes the vendored MIT Git Diff view. It supports repository/comparison selection, changed and unchanged file trees, native VS Code diffs, context export, and optional Codex MCP integration without a separate Git Diff Viewer extension.
 
@@ -62,7 +62,8 @@ Tab锛堟垨 Shift+Tab锛夊彧鍦?Manager 鍜?Workers 涓や釜涓荤晫闈�
 | F1 / F2 / F3 / F4 | manager 瀵硅瘽 / 閫変腑 worker 瀵硅瘽 / 宸ヤ綔鍖?/ Git |
 | F5 | 灞曞紑 / 鎶樺彔褰撳墠瀵硅瘽鐨勫叏閮ㄥ悗鍙拌繃绋?|
 | `/expand 缁勫彿`銆乣/collapse 缁勫彿` | 鍗曠嫭灞曞紑 / 鎶樺彔涓€缁勶紱鍙傛暟 `all` 琛ㄧず鍏ㄩ儴 |
-| `/w 娑堟伅` | 鍚戦€変腑 worker 鍙戞秷鎭紝鎿嶄綔鍚屾缁?manager |
+| `/w` | 打开 Workers 界面 |
+| `/msg worker_id 消息` | 向指定 worker 发消息，操作同步给 manager |
 | `/pause`銆乣/resume`銆乣/cancel`銆乣/retry 鍘熷洜` | 鎺у埗閫変腑 worker 浠诲姟 |
 | `/select worker_id` | 鎸?ID 閫夋嫨 worker |
 | `/open 鐩稿璺緞`銆乣/back` | 鏌ョ湅鏂囦欢鎴栫洰褰曪紱棣栫増涓哄彧璇婚瑙?|
@@ -128,7 +129,8 @@ Tab锛堟垨 Shift+Tab锛夊彧鍦?Manager 鍜?Workers 涓や釜涓荤晫闈�
 | F1 / F2 / F3 / F4 | manager 瀵硅瘽 / 閫変腑 worker 瀵硅瘽 / 宸ヤ綔鍖?/ Git |
 | F5 | 灞曞紑 / 鎶樺彔褰撳墠瀵硅瘽鐨勫叏閮ㄥ悗鍙拌繃绋?|
 | `/expand 缁勫彿`銆乣/collapse 缁勫彿` | 鍗曠嫭灞曞紑 / 鎶樺彔涓€缁勶紱鍙傛暟 `all` 琛ㄧず鍏ㄩ儴 |
-| `/w 娑堟伅` | 鍚戦€変腑 worker 鍙戞秷鎭紝鎿嶄綔鍚屾缁?manager |
+| `/w` | 打开 Workers 界面 |
+| `/msg worker_id 消息` | 向指定 worker 发消息，操作同步给 manager |
 | `/pause`銆乣/resume`銆乣/cancel`銆乣/retry 鍘熷洜` | 鎺у埗閫変腑 worker 浠诲姟 |
 | `/select worker_id` | 鎸?ID 閫夋嫨 worker |
 | `/open 鐩稿璺緞`銆乣/back` | 鏌ョ湅鏂囦欢鎴栫洰褰曪紱棣栫増涓哄彧璇婚瑙?|
@@ -175,8 +177,6 @@ Manager 鍜岄粯璁?Worker 鏄袱绫?staff锛屽垎鍒繚瀛?`provider`�
 Codex 浼氳瘽鏀寔鍘熺敓 turn 鏌ヨ銆乫ork 鍜屽巻鍙?revert銆侺astOrder control API 宸叉彁渚?/conversation/turns銆?conversation/fork銆?conversation/revert锛涙枃浠舵仮澶嶄粛鐢?Last Order 鐨?workspace snapshot 璐熻矗銆?
 ## VSCode 瀹㈡埛绔紙绗竴闃舵锛?
 浠撳簱涓殑 `vscode-extension/` 鏄?Last Order backend 鐨勫紑鍙戠増 VSCode 鎵╁睍銆傚畠涓嶆妸 Last Order backend 鏀捐繘 extension host锛岃€屾槸鍚姩鐙珛 Node 鏈嶅姟鎴栭檮鐫€鍒板凡鏈夋湇鍔°€?
-- 鐙珛 Last Order backend 鏈嶅姟浼氬彂甯?`.git/last-order/control.json`锛汿UI 鍜?VSCode 鎵╁睍杩炴帴璇?endpoint銆?- 鎵╁睍榛樿鑷姩鍚姩鏈嶅姟骞跺湪缂栬緫鍣ㄥ彸渚у垎鏍忔墦寮€ TUI锛涘彲閫氳繃 `missionControl.autoStart` 鍜?`missionControl.autoOpenTui` 鍏抽棴銆?- VSCode 鏄崟涓€浜у搧鍏ュ彛锛氬乏渚?Last Order backend worker 鏍戯紝鍙充晶杈呭姪渚ф爮浣跨敤 xterm WebviewView 鎵胯浇鐜版湁瀹屾暣 TUI锛學orker 鐩戞帶浣跨敤缂栬緫鍣ㄥ尯缁堢椤电銆?- 褰撳墠鎻愪緵 worker 鏍戙€佸彸渚?TUI 缁堢瑙嗗浘銆侀€夊尯/鏂囦欢涓婁笅鏂囥€佸鎵瑰叆鍙ｃ€佸師鐢?VSCode diff銆乵anager 澶囨敞缂栬緫銆佷汉宸ユ帴绠?浜よ繕銆乧heckpoint 鍒涘缓/鎭㈠銆佹墦寮€ worktree 鍜?monitor銆?- 鎵╁睍鍚姩鐨勬湇鍔￠粯璁ゅ湪鎵╁睍閫€鍑烘椂鍋滄锛涘彲璁剧疆 `missionControl.keepRunningOnDeactivate` 淇濈暀銆?- 寮€鍙戣繍琛岋細鐢?VSCode 鎵撳紑 `vscode-extension/`锛屽惎鍔?Extension Development Host锛屽啀鎵撳紑鐩爣椤圭洰銆?
-褰撳墠闄愬埗锛氭墿灞曡繕娌℃湁 hunk 绾у簲鐢?鍥炴粴鍜?Linux 鎵撳寘銆俉ebview 鍙礋璐?xterm 缁堢娓叉煋锛屼笉鍖呭惈鑷缓 Manager/Worker 瀵硅瘽 UI锛涙墍鏈夌鐞嗙晫闈㈠鐢?TUI 缁堢娓叉煋銆?
 
 ## Last Order backend 璋冨害琛屼负
 
@@ -220,4 +220,18 @@ manager 鐨勮亴璐ｉ€氳繃鎸囦护鍜屽悇杞戒綋鍙敤鐨勯檺鍒
 棣栫増鏂囦欢棰勮涓婇檺涓?256 KB锛屼笉鎻愪緵缂栬緫鍣ㄦ垨鍘熺敓缁堢宓屽銆傚伐浣滃尯鍜?Git 椤甸潰鎸夐渶鍒锋柊锛涘璇濄€佺姸鎬佷笌瀹℃壒瀹炴椂鏇存柊銆傛湭鎻愪緵瀹夎鍣ㄦ垨鎵撳寘鍚庣殑 Windows `.exe`銆?
 闇€姹備笌璁捐鍘嗗彶瑙?[闇€姹傝褰昡(docs/requirements.md)銆乕绯荤粺璁捐](docs/architecture.md)銆乕CLI 鎺ュ叆璇佹嵁](docs/cli-integration.md)銆乕ADR](docs/adr/)銆?
 
-- VSCode Manager TUI supports up to eight PNG/JPEG/GIF/WebP attachments with thumbnail previews; Codex receives them as native `localImage` inputs.
+- The VSCode Manager Webview supports up to eight PNG/JPEG/GIF/WebP attachments with thumbnail previews; Codex receives them as native `localImage` inputs.
+
+## Linux troubleshooting
+
+- Extension upgrades reject incompatible detached backends and restart from the bundled backend after saving interrupted state.
+- Codex `paginated_threads` resume failures fall back to a fresh native thread while preserving Last Order history and task state.
+- SSH sessions without X11 or Wayland use the terminal paste shortcut `Ctrl+Shift+V` or `Shift+Insert`.
+- Run `/version` to inspect the active Last Order build, Mission Control protocol, provider configuration, platform, and project path.
+- See [Troubleshooting](docs/troubleshooting.md) for diagnostics and `LO_CODEX_COMMAND` configuration.
+
+## Native Manager Webview
+
+The VSCode extension now uses native DOM for all product UI. The Manager view contains Manager and Workers surfaces, a fixed message composer, image attachments, approvals and questions, worker conversation/status controls, workspace and Git previews, message quoting, provider-native turn fork/revert, settings, checkpoints, skills, and a command sheet. It no longer packages or launches xterm, a Webview terminal host, or a VSCode terminal monitor. The `last-order` command line application retains its own terminal interface independently.
+
+Webview messages turn code-formatted file paths into editor links. The Composer also provides editor-selection insertion, per-target draft/history, slash-command compatibility, and a fixed layout at sidebar widths.

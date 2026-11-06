@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { StdioRpc } from './rpc.js';
 
 export class DeepSeekRuntime {
@@ -9,6 +10,9 @@ export class DeepSeekRuntime {
   }
   constructor(context, command) {
     this.context = context;
+    this.collectingMessage = false;
+    this.streamMessageId = null;
+    this.streamText = '';
     this.rpc = new StdioRpc(command, ['--profile', 'acp'], { cwd: context.cwd }, (m, p) => this.request(m, p), (m, p) => this.notification(m, p));
   }
   async initialize() {
@@ -33,12 +37,28 @@ export class DeepSeekRuntime {
     await this.context.emit({ type: 'activity', method });
     if (method !== 'session/update') return;
     const update = params.update;
-    if (update.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') await this.context.emit({ type: 'message', text: update.content.text });
+    if (update.sessionUpdate === 'agent_message_chunk' && update.content?.type === 'text') {
+      if (this.collectingMessage) {
+        this.streamMessageId ??= randomUUID();
+        this.streamText += update.content.text;
+        await this.context.emit({ type: 'message', id: this.streamMessageId, text: this.streamText, role: 'assistant', streaming: true });
+      }
+    }
     else if (['tool_call', 'tool_call_update'].includes(update.sessionUpdate)) await this.context.emit({ type: 'message', role: 'tool', text: `${update.title ?? update.toolCallId}: ${update.status ?? ''}` });
   }
   async run(prompt) {
-    const result = await this.rpc.request('session/prompt', { sessionId: this.sessionId, prompt: [{ type: 'text', text: this.context.instructions + '\n\n' + prompt }] }, 0);
-    if (result.stopReason !== 'end_turn') throw new Error('DSH prompt stopped: ' + result.stopReason);
+    this.collectingMessage = true;
+    this.streamMessageId = randomUUID();
+    this.streamText = '';
+    try {
+      const result = await this.rpc.request('session/prompt', { sessionId: this.sessionId, prompt: [{ type: 'text', text: this.context.instructions + '\n\n' + prompt }] }, 0);
+      if (result.stopReason !== 'end_turn') throw new Error('DSH prompt stopped: ' + result.stopReason);
+      if (this.streamText) await this.context.emit({ type: 'message', id: this.streamMessageId, text: this.streamText, role: 'assistant', streaming: false });
+    } finally {
+      this.collectingMessage = false;
+      this.streamMessageId = null;
+      this.streamText = '';
+    }
   }
   async stop() { await this.rpc.stop(); }
 }

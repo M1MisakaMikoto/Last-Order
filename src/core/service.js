@@ -16,7 +16,7 @@ const terminal = new Set(['succeeded', 'cancelled']);
 const archivable = new Set(['succeeded', 'failed', 'cancelled', 'interrupted', 'paused', 'blocked_requirements', 'blocked_technical', 'review_failed']);
 const IMAGE_MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif', '.webp': 'image/webp' };
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-const MANAGER_POLICY_VERSION = '2026-11-04.3';
+const MANAGER_POLICY_VERSION = '2026-11-06.1';
 function requiresExploreDelegation(text) {
   const value = String(text ?? '');
   if (/(?:[a-z]:[\\/]|(?:^|\s)\.{0,2}[\\/])[^\r\n]*\.(?:zip|7z|rar|tar|gz|tgz|code-workspace)/i.test(value)) return true;
@@ -29,6 +29,7 @@ export class MissionControlService extends EventEmitter {
     this.config = normalizeConfig({}, config);
     this.store = new Store(git.directory, { schemaVersion: 1, requests: {}, pipelines: {}, workers: {}, notifications: [], manager: { sessionId: null, pending: [], active: [], hold: false, memoryEpoch: 0, epoch: 0 }, config: this.config });
     this.runtimes = new Map(); this.active = new Set(); this.tasks = new Map(); this.approvals = new Map(); this.questions = new Map(); this.keys = new Map();
+    this.streamingMessages = new Map(); this.streamRevision = 0;
     this.managerAgents = '';
   }
   get state() { return this.store.state; }
@@ -36,8 +37,8 @@ export class MissionControlService extends EventEmitter {
     if (this.closed) return;
     const event = this.store.commit(type, data, mutate, actor); this.emit('change', event); return event;
   }
-  log(actor, role, text, tool) {
-    const background = role === 'tool' || (actor === 'manager' && role === 'assistant' && this.managerTurn?.background);
+  log(actor, role, text, tool, backgroundOverride) {
+    const background = backgroundOverride ?? (role === 'tool' || (actor === 'manager' && role === 'assistant' && this.managerTurn?.background));
     const memoryEpoch = actor === 'manager' ? (this.state.manager.memoryEpoch ?? 0) : undefined;
     const expanded = expandIncludes(String(text), this.git.root);
     return this.change('message', {
@@ -52,7 +53,7 @@ export class MissionControlService extends EventEmitter {
       managerAgentsPath: path.join(this.git.directory, 'AGENTS.md'), managerAgents: this.managerAgents
     };
   }
-  snapshot() { return { ...this.state, approvals: [...this.approvals.values()].map(({ resolve, ...x }) => x), questions: [...this.questions.values()].map(({ resolve, ...x }) => x), managerBusy: Boolean(this.managerBusy), managerError: this.managerError, prompt_config: this.promptConfig() }; }
+  snapshot() { return { ...this.state, streamRevision: this.streamRevision, approvals: [...this.approvals.values()].map(({ resolve, ...x }) => x), questions: [...this.questions.values()].map(({ resolve, ...x }) => x), managerBusy: Boolean(this.managerBusy), managerError: this.managerError, prompt_config: this.promptConfig() }; }
   async start() {
     try { this.managerAgents = await readFile(path.join(this.git.directory, 'AGENTS.md'), 'utf8'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -105,7 +106,39 @@ export class MissionControlService extends EventEmitter {
     else if (event.type === 'turn') this.change('native_turn', { turnId: event.id }, s => {
       (actor === 'manager' ? s.manager : s.workers[actor]).lastTurnId = event.id;
     }, actor);
-    else if (event.type === 'message') this.log(actor, event.role ?? 'assistant', event.text, event.tool);
+    else if (event.type === 'message') {
+      if (!event.id) {
+        const role = event.role ?? 'assistant';
+        const text = this.managerReplyWithDisclosure(actor, { ...event, role }, event.text);
+        this.log(actor, role, text, event.tool, event.background);
+      }
+      else if (event.streaming === false) {
+        const key = actor + ':' + event.id;
+        const stream = this.streamingMessages.get(key);
+        this.streamingMessages.delete(key);
+        this.streamRevision++;
+        const role = event.role ?? stream?.role ?? 'assistant';
+        const text = this.managerReplyWithDisclosure(
+          actor, { ...event, role }, event.text ?? stream?.text ?? ''
+        );
+        if (text) this.log(actor, role, text, event.tool ?? stream?.tool, event.background ?? stream?.background);
+        this.emit('activity', { actor, method: 'message_end', id: event.id });
+      } else {
+        const key = actor + ':' + event.id;
+        const existing = this.streamingMessages.get(key);
+        const role = event.role ?? existing?.role ?? 'assistant';
+        const text = String(event.text ?? '');
+        if (existing?.text === text) return;
+        this.streamingMessages.set(key, {
+          actor, id: event.id, role, text, tool: event.tool ?? existing?.tool,
+          time: existing?.time ?? new Date().toISOString(),
+          background: event.background ?? existing?.background ?? (role === 'tool' || (actor === 'manager' && role === 'assistant' && this.managerTurn?.background)),
+          memoryEpoch: actor === 'manager' ? (this.state.manager.memoryEpoch ?? 0) : undefined
+        });
+        this.streamRevision++;
+        this.emit('activity', { actor, method: 'message_delta', id: event.id });
+      }
+    }
     else if (event.type === 'activity') {
       const worker = this.state.workers[actor]; if (worker) worker.lastActivity = now();
       this.emit('activity', { actor, ...event });
@@ -119,6 +152,41 @@ export class MissionControlService extends EventEmitter {
         } else this.log('manager', 'system', `${event.type} ${itemId}: ${JSON.stringify(event.detail)}`);
         this.emit('change', { type: event.type });
       });
+    }
+  }
+  history(actor, limit = 400) {
+    const events = this.store.history(actor, limit);
+    for (const stream of this.streamingMessages.values()) {
+      if (stream.actor !== actor) continue;
+      events.push({
+        seq: null, time: stream.time, actor, type: 'message',
+        data: {
+          role: stream.role, text: stream.text, streaming: true,
+          ...(stream.tool ? { tool: stream.tool } : {}),
+          ...(stream.background ? { background: true } : {}),
+          ...(stream.memoryEpoch !== undefined ? { memoryEpoch: stream.memoryEpoch } : {})
+        }
+      });
+    }
+    return events.slice(-limit);
+  }
+  finalizeStreamingMessages(actor) {
+    for (const [key, stream] of this.streamingMessages) {
+      if (stream.actor !== actor) continue;
+      this.streamingMessages.delete(key);
+      this.streamRevision++;
+      if (stream.text) this.log(actor, stream.role, stream.text, stream.tool, stream.background);
+    }
+  }
+  clearStreamingMessages(actor) {
+    let changed = false;
+    for (const [key, stream] of this.streamingMessages) {
+      if (stream.actor !== actor) continue;
+      this.streamingMessages.delete(key); changed = true;
+    }
+    if (changed) {
+      this.streamRevision++;
+      this.emit('activity', { actor, method: 'message_end' });
     }
   }
   respondApproval(approvalId, allowed) {
@@ -220,10 +288,54 @@ export class MissionControlService extends EventEmitter {
       workerTitle: args.title,
       inputWorkerId: previous?.id ?? null
     });
+    if (this.managerTurn) {
+      const worker = Object.values(this.state.workers).find(item => item.pipelineId === pipeline.id);
+      this.managerTurn.delegations.push({
+        workerId: worker?.id ?? pipeline.stages?.[0]?.workerId ?? null,
+        taskId: pipeline.id,
+        title: args.title,
+        kind: args.kind ?? 'implement'
+      });
+    }
     return {
       task_id: pipeline.id, request_id: pipeline.requestId, status: pipeline.status,
       input_worker_id: previous?.id ?? null, notes: [...pipeline.notes]
     };
+  }
+  ensureManagerDelegationDisclosure(turn) {
+    if (!turn?.delegations?.length) return;
+    const events = this.store.history('manager', 500).filter(event =>
+      event.seq > (turn.startSeq ?? 0) && event.type === 'message' &&
+      event.data.role === 'assistant' && !event.data.background
+    );
+    const reply = events.map(event => String(event.data.text ?? '')).join('\n');
+    if (turn.disclosureAdded || this.delegationsClearlyDisclosed(turn.delegations, reply)) return;
+    this.log('manager', 'assistant', this.formatDelegationDisclosure(turn.delegations), undefined, false);
+  }
+  delegationsClearlyDisclosed(delegations, reply) {
+    const hasIntent = /委派|已启动|启动|安排|delegat|dispatch/i.test(reply);
+    const missing = delegations.filter(delegation => {
+      const identifiers = [delegation.workerId, delegation.taskId, delegation.title].filter(Boolean);
+      return !identifiers.some(identifier => reply.includes(String(identifier)));
+    });
+    return hasIntent && !missing.length;
+  }
+  formatDelegationDisclosure(delegations) {
+    const lines = [`委派：已启动 ${delegations.length} 个 Worker`];
+    for (const delegation of delegations) {
+      lines.push(`- ${delegation.workerId ?? delegation.taskId} · ${delegation.title ?? delegation.taskId}（${delegation.kind}）`);
+    }
+    return lines.join('\n');
+  }
+  managerReplyWithDisclosure(actor, event, value) {
+    const text = String(value ?? '');
+    const turn = this.managerTurn;
+    const background = event.background === true || (event.background === undefined && turn?.background);
+    if (actor !== 'manager' || event.role !== 'assistant' || background || !turn?.delegations?.length) return text;
+    if (turn.disclosureAdded) return text;
+    if (this.delegationsClearlyDisclosed(turn.delegations, text)) { turn.disclosureAdded = true; return text; }
+    turn.disclosureAdded = true;
+    return text ? `${text}\n\n${this.formatDelegationDisclosure(turn.delegations)}` : this.formatDelegationDisclosure(turn.delegations);
   }
   async updateWorkerNotes(workerId, notes) {
     const worker = this.state.workers[workerId];
@@ -353,6 +465,7 @@ export class MissionControlService extends EventEmitter {
         if (!this.isCurrent(workerId, epoch)) return;
         prompt = 'Process the pending follow-ups. Inspect current files and report the updated stage result.';
       } while (this.state.workers[workerId].inbox.length);
+      this.finalizeStreamingMessages(workerId);
       const result = this.state.workers[workerId].result;
       if (!result) throw new Error('Worker ended without report_result; completion cannot be inferred from process exit');
       let commit;
@@ -381,6 +494,7 @@ export class MissionControlService extends EventEmitter {
       }
     } catch (error) {
       if (this.isCurrent(workerId, epoch)) {
+        this.clearStreamingMessages(workerId);
         this.change('stage_failed', { workerId, error: error.message }, s => { s.workers[workerId].status = 'failed'; s.pipelines[pipelineId].status = 'failed'; s.pipelines[pipelineId].stages[index].status = 'failed'; });
         const failedWorker = this.state.workers[workerId], notes = failedWorker?.notes ?? [];
         const noteText = notes.length ? '\nManager notes:\n' + notes.map((note, index) => `${index + 1}. ${note}`).join('\n') : '';
@@ -450,6 +564,7 @@ export class MissionControlService extends EventEmitter {
     for (const [key, a] of this.approvals) if (a.actor === workerId) { this.approvals.delete(key); a.resolve(false); }
     for (const [key, q] of this.questions) if (q.actor === workerId) { this.questions.delete(key); q.resolve('Task was ' + action); }
     const affected = Object.values(this.state.workers).filter(x => x.pipelineId === w.pipelineId && x.stageIndex >= w.stageIndex);
+    for (const affectedWorker of affected) this.clearStreamingMessages(affectedWorker.id);
     await Promise.allSettled(affected.map(x => this.runtimes.get(x.id)?.stop()));
     if (source === 'user') this.notify('user_control', workerId, `${action}: ${reason}`);
     this.tick(); return { status: this.state.workers[workerId].status };
@@ -626,6 +741,7 @@ export class MissionControlService extends EventEmitter {
     }, 'manager');
     this.managerError = null;
     if (interrupt && this.managerBusy) {
+      this.clearStreamingMessages('manager');
       this.change('manager_interrupted', {}, s => { s.manager.epoch++; s.manager.active = []; });
       const runtime = this.managerRuntime; this.managerRuntime = null;
       for (const [key, a] of this.approvals) if (a.actor === 'manager') { this.approvals.delete(key); a.resolve(false); }
@@ -644,6 +760,7 @@ export class MissionControlService extends EventEmitter {
       s.manager.pending = s.manager.pending.filter(item => !active.has(item.id));
     });
     this.managerError = null;
+    this.clearStreamingMessages('manager');
     const runtime = this.managerRuntime;
     this.managerRuntime = null;
     for (const [key, approval] of this.approvals) if (approval.actor === 'manager') { this.approvals.delete(key); approval.resolve(false); }
@@ -677,6 +794,9 @@ export class MissionControlService extends EventEmitter {
       s.manager.active = activeMessageIds;
     });
     const turn = { background: !pending.length && !notifications.some(n => ['worker_delivered', 'worker_finished', 'worker_question', 'worker_failed', 'integration_required'].includes(n.type)) };
+    turn.startSeq = this.store.history('manager', 1)[0]?.seq ?? 0;
+    turn.delegations = [];
+    turn.disclosureAdded = false;
     this.managerTurn = turn;
     const managerSkillText = pending.map(item => item.text).join('\n');
     const selectedSkills = pending.length && selectedSkillNames(managerSkillText).length
@@ -685,7 +805,7 @@ export class MissionControlService extends EventEmitter {
     const delegationPolicy = pending.length ? {
       policy_version: MANAGER_POLICY_VERSION,
       requires_explore: pending.some(item => requiresExploreDelegation(item.text)),
-      instruction: 'Keep requirement clarification, scope negotiation and user decisions with the manager. Delegate only bounded, self-contained work. Identify independent workstreams and start their workers in parallel immediately; serialize only when a real dependency exists. When requires_explore is true, do not inspect project files, commands, archives or repository contents yourself, and do not wait for it before starting unrelated workers. Use the explore result only for dependent conclusions. Report activity factually: distinguish manager actions (alignment, planning, decomposition) from worker actions (exploration, implementation, testing). Name the started worker/task when known. Never say you are inspecting, reading, running or implementing work that has been delegated. Tell the user whether they only need to wait or whether a decision is required.'
+      instruction: 'Keep requirement clarification, scope negotiation and user decisions with the manager. Delegate only bounded, self-contained work. Identify independent workstreams and start their workers in parallel immediately; serialize only when a real dependency exists. When requires_explore is true, do not inspect project files, commands, archives or repository contents yourself, and do not wait for it before starting unrelated workers. Use the explore result only for dependent conclusions. Report activity factually: distinguish manager actions (alignment, planning, decomposition) from worker actions (exploration, implementation, testing). Every user-facing reply after start_worker must explicitly say that work was delegated and name every started worker/task; never only imply delegation. Never say you are inspecting, reading, running or implementing work that has been delegated. Tell the user whether they only need to wait or whether a decision is required.'
     } : null;
     try {
       if (delegationPolicy?.requires_explore) {
@@ -713,6 +833,10 @@ export class MissionControlService extends EventEmitter {
       }, null, 2);
       const attachments = pending.flatMap(message => message.attachments ?? []);
       await runtime.run(prompt, { attachments });
+      if (this.isCurrent('manager', epoch)) {
+        this.finalizeStreamingMessages('manager');
+        this.ensureManagerDelegationDisclosure(turn);
+      }
       if (this.isCurrent('manager', epoch)) this.change('manager_processed', { messageIds: pending.map(x => x.id), notificationIds: notifications.map(x => x.id) }, s => {
         const m = new Set(pending.map(x => x.id)), n = new Set(notifications.map(x => x.id));
         s.manager.pending = s.manager.pending.filter(x => !m.has(x.id)); s.notifications = s.notifications.filter(x => !n.has(x.id));
@@ -720,6 +844,7 @@ export class MissionControlService extends EventEmitter {
       });
     } catch (error) {
       if (this.isCurrent('manager', epoch)) {
+        this.clearStreamingMessages('manager');
         this.change('manager_turn_failed', {}, s => { s.manager.active = []; });
         this.managerError = error.message; this.log('manager', 'error', error.message + ' — send a message to retry.'); await this.managerRuntime?.stop(); this.managerRuntime = null;
       }
@@ -739,7 +864,7 @@ You are the project manager accountable only to the user. Mission Control is the
 
 Mission Control does not run programmatic pipeline chains. Use start_worker for standalone tasks. Do not start workers that depend on one another in parallel; only serialize work with a real data or ordering dependency. When one user request contains multiple independent workstreams, start separate workers for them immediately in parallel, up to maxWorkers. State clearly which workers were started in parallel. Do not wait for an explore worker before starting another task that does not depend on its findings. Before or during a worker turn, use update_worker_notes to store manager-only reminders such as follow-up checks or a new requirement that must wait for this worker. Notes are not sent to the worker; Mission Control returns them in the worker_finished or worker_failed callback. When a callback arrives, inspect the worker, result, commit and your notes, then decide the next action. The input contains delegation_policy: if requires_explore is true, the explore worker is already started; acknowledge it and do not duplicate that exploration. Wait for its result only for conclusions that depend on it, while immediately starting other independent workers that can proceed now.
 
-For work that must continue from a completed worker, call start_worker with input_worker_id set to that worker. Mission Control will create the next worker worktree from the completed commit. Reuse request_id for related work; when input_worker_id is provided and request_id is omitted, the request is inherited. This replaces automatic stage chaining and keeps sequencing under manager control.
+For work that must continue from a completed worker, call start_worker with input_worker_id set to that worker. Mission Control will create the next worker worktree from the completed commit. Reuse request_id for related work; when input_worker_id is provided and request_id is omitted, the request is inherited. This replaces automatic stage chaining and keeps sequencing under manager control. After calling start_worker, your user-facing reply must explicitly say that work was delegated and name every started worker/task; do not merely say you are working on it.
 
 When the user asks you to remember a preference, working habit, standard or workflow, call remember_manager_guidance. Mission Control stores it in the manager AGENTS.md memory and does not modify project files. Keep this durable memory distinct from the code-owned system prompt and from the user-editable manager/worker prompt configuration.
 

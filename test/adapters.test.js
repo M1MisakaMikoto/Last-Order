@@ -42,6 +42,32 @@ test('Codex starts a fresh thread when a saved manager rollout is stale', async 
   assert.deepEqual(events.at(-1), { type: 'session', id: 'fresh-thread' });
 });
 
+test('Codex starts a fresh thread when the CLI cannot resume paginated history', async () => {
+  const calls = [], events = [];
+  const runtime = {
+    context: {
+      sessionId: 'paginated-thread', cwd: '/project', instructions: 'role', tools: [], actor: 'manager',
+      emit: async event => events.push(event)
+    },
+    rpc: {
+      notify() {},
+      request: async (method, params) => {
+        calls.push([method, params]);
+        if (method === 'initialize') return {};
+        if (method === 'thread/resume') throw new Error('paginated_threads is not supported yet');
+        if (method === 'thread/start') return { thread: { id: 'fresh-paginated-thread' } };
+        return {};
+      }
+    }
+  };
+  await CodexRuntime.prototype.initialize.call(runtime);
+  assert.deepEqual(calls.map(call => call[0]), ['initialize', 'thread/resume', 'thread/start']);
+  assert.equal(runtime.threadId, 'fresh-paginated-thread');
+  assert.ok(events.some(event => event.type === 'message' && event.role === 'warning' && /paginated thread/.test(event.text)));
+  assert.ok(events.some(event => event.type === 'activity' && event.method === 'thread/resume/paginated-unsupported'));
+  assert.deepEqual(events.at(-1), { type: 'session', id: 'fresh-paginated-thread' });
+});
+
 test('Codex defaults workers to native auto_review on new and resumed threads and keeps manager/explore workers read-only', async () => {
   for (const [actor, reviewer, sessionId, expected, readOnly = false] of [
     ['w', undefined, undefined, 'auto_review'], ['w', 'user', undefined, 'user'],
@@ -92,6 +118,38 @@ test('Codex tool notifications preserve full arguments, status and results', asy
   assert.equal(tools[1].durationMs, 125);
 });
 
+test('Codex keeps commentary and interim answers out of the user-facing final reply', async () => {
+  const events = [];
+  const runtime = {
+    context: { emit: async event => events.push(event) },
+    agentMessageStreams: new Map(), agentMessagePhases: new Map(),
+    lastPartialAnswer: null, sawFinalAnswer: false
+  };
+  Object.setPrototypeOf(runtime, CodexRuntime.prototype);
+  const item = (id, phase, text) => ({ item: { id, type: 'agentMessage', phase, text } });
+  await CodexRuntime.prototype.notification.call(runtime, 'item/started', item('commentary-1', 'commentary', ''));
+  await CodexRuntime.prototype.notification.call(runtime, 'item/agentMessage/delta', { itemId: 'commentary-1', delta: 'Checking provider' });
+  await CodexRuntime.prototype.notification.call(runtime, 'item/completed', item('commentary-1', 'commentary', 'Checking provider'));
+  await CodexRuntime.prototype.notification.call(runtime, 'item/started', item('final-1', 'final_answer', ''));
+  await CodexRuntime.prototype.notification.call(runtime, 'item/agentMessage/delta', { itemId: 'final-1', delta: 'Draft answer' });
+  await CodexRuntime.prototype.notification.call(runtime, 'item/completed', item('final-1', 'final_answer', 'Draft answer'));
+  await CodexRuntime.prototype.notification.call(runtime, 'item/started', item('final-2', 'final_answer', ''));
+  await CodexRuntime.prototype.notification.call(runtime, 'item/agentMessage/delta', { itemId: 'final-2', delta: 'Please provide the Base URL' });
+  await CodexRuntime.prototype.notification.call(runtime, 'item/completed', item('final-2', 'final_answer', 'Please provide the Base URL'));
+  await CodexRuntime.prototype.notification.call(runtime, 'turn/completed', { turn: { status: 'completed' } });
+  const messages = events.filter(event => event.type === 'message');
+  assert.deepEqual(messages.map(message => [message.text, Boolean(message.background), message.streaming]), [
+    ['Checking provider', true, true],
+    ['Checking provider', true, false],
+    ['Draft answer', false, true],
+    ['Please provide the Base URL', false, true],
+    ['Please provide the Base URL', false, false]
+  ]);
+  const visible = messages.filter(message => !message.background);
+  assert.equal(new Set(visible.map(message => message.id)).size, 1);
+  assert.equal(visible.filter(message => message.streaming === false).length, 1);
+});
+
 test('Codex and Claude staff model/effort settings map to native launch options', async () => {
   let options;
   const runtime = {
@@ -103,6 +161,7 @@ test('Codex and Claude staff model/effort settings map to native launch options'
   assert.equal(options.config.model_reasoning_effort, 'high');
 
   const args = claudeArgs({ actor: 'manager', instructions: 'role', model: 'claude-sonnet-4-5', effort: 'medium', sessionId: null }, 'mcp.json');
+  assert.ok(args.includes('--include-partial-messages'), 'Claude streams native partial messages');
   assert.deepEqual(args.slice(args.indexOf('--model'), args.indexOf('--model') + 2), ['--model', 'claude-sonnet-4-5']);
   assert.deepEqual(args.slice(args.indexOf('--effort'), args.indexOf('--effort') + 2), ['--effort', 'medium']);
   const explore = claudeArgs({ actor: 'worker_explore', readOnly: true, instructions: 'role' }, 'mcp.json');
@@ -164,6 +223,32 @@ test('Codex sends skill markers as text and local images as image inputs', async
   assert.deepEqual(events.at(-1), { type: 'turn', id: 'turn-skills-1' });
 });
 
+test('DSH streams ACP text chunks and emits one completed message per turn', async () => {
+  const events = [];
+  const runtime = {
+    context: { instructions: 'role', emit: async event => events.push(event) },
+    rpc: {
+      request: async () => {
+        for (const text of ['Fixture ', 'done']) {
+          await DeepSeekRuntime.prototype.notification.call(runtime, 'session/update', {
+            update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } }
+          });
+        }
+        return { stopReason: 'end_turn' };
+      }
+    }
+  };
+  Object.setPrototypeOf(runtime, DeepSeekRuntime.prototype);
+  runtime.sessionId = 'session-fixture';
+  await DeepSeekRuntime.prototype.run.call(runtime, 'prompt');
+  const messages = events.filter(event => event.type === 'message');
+  assert.equal(messages.length, 3);
+  assert.equal(new Set(messages.map(message => message.id)).size, 1);
+  assert.deepEqual(messages.map(message => [message.text, message.streaming]), [
+    ['Fixture ', true], ['Fixture done', true], ['Fixture done', false]
+  ]);
+});
+
 for (const [provider, Runtime] of Object.entries({ codex: CodexRuntime, claude: ClaudeRuntime, dsh: DeepSeekRuntime, opencode: OpenCodeRuntime })) {
   test(`${provider} adapter maps session, native approval and explicit completion against a protocol fixture`, async t => {
     const directory = await temporary('adapter-' + provider + '-');
@@ -171,6 +256,8 @@ for (const [provider, Runtime] of Object.entries({ codex: CodexRuntime, claude: 
     const service = new MissionControlService(git, async (p, context) => context.actor === 'manager' ? { run: async () => {}, stop: async () => {} } : Runtime.create(context, command), { manager: provider, worker: provider });
     t.after(async () => { await service.stop(); await cleanup(directory); });
     let approved = 0;
+    let streamingUpdates = 0;
+    service.on('activity', event => { if (event.method === 'message_delta') streamingUpdates++; });
     service.on('change', () => { for (const id of service.approvals.keys()) { approved++; service.respondApproval(id, true); } });
     await service.start();
     const pipeline = await service.registerPipeline({ title: 'Fixture task', stages: [{ kind: 'implement', prompt: 'Fixture only' }] });
@@ -182,5 +269,8 @@ for (const [provider, Runtime] of Object.entries({ codex: CodexRuntime, claude: 
     assert.equal(approved, 1);
     const worker = Object.values(service.state.workers)[0];
     assert.equal(worker.sessionId, 'session-fixture'); assert.equal(worker.status, 'succeeded');
+    assert.ok(streamingUpdates > 0, `${provider} forwards native streaming updates`);
+    const assistantMessages = service.store.history(worker.id).filter(event => event.type === 'message' && event.data.role === 'assistant');
+    assert.deepEqual(assistantMessages.map(event => event.data.text), ['Fixture done'], `${provider} emits one completed assistant message`);
   });
 }

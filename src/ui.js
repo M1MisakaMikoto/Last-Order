@@ -8,14 +8,16 @@ import { commandCompletions, fileQuery } from './commands.js';
 import { PROVIDERS } from './core/tools.js';
 import { DEFAULT_CONFIG, validateConfig } from './core/config.js';
 import { copyText, readClipboard } from './clipboard.js';
-import { PRODUCT_NAME } from './core/identity.js';
+import { PRODUCT_NAME, CONTROL_PROTOCOL_VERSION } from './core/identity.js';
+import { APP_VERSION } from './core/version.js';
 
 const statusLabel = status => ({ queued: '排队', starting: '启动中', running: '运行中', waiting_approval: '等待审批', paused: '已暂停', cancelled: '已取消', failed: '失败', blocked: '阻塞', blocked_requirements: '等待澄清', blocked_technical: '技术阻塞', review_failed: '验收未通过', succeeded: '已完成', interrupted: '已中断' })[status] ?? status;
 const ARCHIVABLE_WORKER_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'interrupted', 'paused', 'blocked_requirements', 'blocked_technical', 'review_failed']);
 function labeledLines(label, value, columns) {
   const prefix = '  ' + fit(label, 4) + '  ';
-  const continuation = ' '.repeat(Array.from(prefix).reduce((sum, char) => sum + width(char), 0));
-  const available = Math.max(1, columns - width(prefix));
+  const prefixWidth = Array.from(prefix).reduce((sum, char) => sum + width(char), 0);
+  const continuation = ' '.repeat(prefixWidth);
+  const available = Math.max(1, columns - prefixWidth);
   return wrap(value, available).map((line, index) => fit((index ? continuation : prefix) + line, columns));
 }
 function compactLabeledLine(label, value, columns) {
@@ -61,6 +63,8 @@ export class TerminalUI {
     this.selection = null; this.lastFrameLines = []; this.lastSize = { columns: 80, rows: 24 }; this.lastConversationView = null;
     this.selectionAutoTimer = null; this.selectionEdge = 0; this.selectionPointer = null; this.renderDelay = 50;
     this.showArchivedOnce = false;
+    this.submitPending = false; this.lastSubmittedText = ''; this.lastSubmittedAt = 0;
+    this.conversationCache = new Map();
     this.projectScroll = 0;
    
   }
@@ -177,7 +181,7 @@ export class TerminalUI {
       worker: this.worker, workers: this.workers, pipelines: this.service.state.pipelines,
       approvals: this.service.approvals ? [...this.service.approvals.values()] : this.service.state.approvals,
       questions: this.service.questions ? [...this.service.questions.values()] : this.service.state.questions,
-      groups: /^\/(?:expand|collapse)\s/.test(this.input) && this.conversationActor ? conversationGroups(this.service.store.history(this.conversationActor)).filter(g => g.kind === 'background') : [],
+      groups: /^\/(?:expand|collapse)\s/.test(this.input) && this.conversationActor ? conversationGroups(this.visibleConversationEvents(this.conversationActor)).filter(g => g.kind === 'background') : [],
       files: files?.entries, fileHint: query ? !this.worker?.workspace ? '需先选择已有工作区的 worker' : files?.error ?? (files ? '' : '正在读取目录…') : '',
       skills: this.skillCompletion?.actor === (this.conversationActor || 'manager') ? this.skillCompletion.entries : [],
       skillHint: this.skillCompletion?.error,
@@ -312,7 +316,7 @@ export class TerminalUI {
       }
       const plain = fit(prefix + text + lineGhost + lineNote, columns);
       const styled = prefix + text + (lineGhost ? '\x1b[90m' + lineGhost + '\x1b[0m' : '') + (lineNote ? '\x1b[2;90m' + lineNote + '\x1b[0m' : '');
-      return { plain, styled, highlightStart, highlightEnd, cursorColumn, text };
+      return { plain, styled, highlightStart, highlightEnd, cursorColumn, text, ghost: lineGhost, note: lineNote };
     });
     const cursorVisibleLine = Math.max(0, cursorLine - windowStart);
     const cursorLineData = lines[cursorVisibleLine];
@@ -451,7 +455,7 @@ export class TerminalUI {
   }
   scrollWheel(delta) {
     this.scrollBy(delta);
-    this.render();
+    this.scheduleRender(16);
   }
   scrollTo(position) { this.scrollState.top = position === 'top' ? 0 : null; }
   clearSelection() {
@@ -471,7 +475,7 @@ export class TerminalUI {
   foldDetails(expand, number = 'all') {
     const actor = this.conversationActor;
     if (!actor) throw new Error('请先打开 Manager 或 worker 对话。');
-    const groups = conversationGroups(this.service.store.history(actor)).filter(group => group.kind === 'background');
+    const groups = conversationGroups(this.visibleConversationEvents(actor)).filter(group => group.kind === 'background');
     if (number === 'all' || !number) {
       if (expand) this.expandedActors.add(actor); else this.expandedActors.delete(actor);
       for (const keys of [this.expandedGroups, this.collapsedGroups]) for (const key of keys) if (key.startsWith(actor + ':')) keys.delete(key);
@@ -482,6 +486,7 @@ export class TerminalUI {
       if (expand) { this.expandedGroups.add(key); this.collapsedGroups.delete(key); }
       else { this.collapsedGroups.add(key); this.expandedGroups.delete(key); }
     }
+    this.conversationCache.clear();
   }
   async start() {
     if (!this.options.virtualTerminal && (!process.stdin.isTTY || !process.stdout.isTTY)) throw new Error('TUI requires an interactive terminal for messages and native CLI approvals.');
@@ -493,7 +498,11 @@ export class TerminalUI {
     }
     process.stdout.write('\x1b[?1049h\x1b[?25l\x1b[?2004h\x1b[?1000l\x1b[?1003l' + (this.settings.mouseSelection === 'app' ? '\x1b[?1002h\x1b[?1006h' : '\x1b[?1002l\x1b[?1006l'));
     this.onKey = (text, key) => this.key(text, key).catch(error => { this.notice = error.message; this.render(); });
-    this.onChange = () => { if (this.selection && !this.selection.dragging) this.clearSelection(); this.scheduleRender(); }; this.onResize = () => { this.clearSelection(); this.render(); };
+    this.onChange = () => {
+      this.conversationCache.clear();
+      if (this.selection && !this.selection.dragging) this.clearSelection();
+      this.scheduleRender();
+    }; this.onResize = () => { this.clearSelection(); this.render(); };
     this.terminalInput.on('keypress', this.onKey);
     if (!this.options.virtualTerminal) process.stdout.on('resize', this.onResize);
     this.service.on('change', this.onChange); this.service.on('activity', this.onChange);
@@ -527,6 +536,7 @@ export class TerminalUI {
     this.selected = 0; this.showArchivedOnce = false;
     this.history = []; this.historyIndex = 0; this.historyDraft = '';
     this.scrollViews.clear(); this.expandedActors.clear(); this.expandedGroups.clear(); this.collapsedGroups.clear();
+    this.conversationCache.clear();
     const active = (this.service.projects ?? []).findIndex(item => item.active);
     this.projectScroll = Math.max(0, Math.min(active - 1, (this.service.projects?.length ?? 1) - 3));
     this.panel = 'manager'; this.screen = 'manager';
@@ -643,13 +653,14 @@ export class TerminalUI {
       this.render();
       return;
     }
-    if (key.ctrl && key.name === 'return') { this.insertNewline(); return; }
+    if (key.shift && key.name === 'return') { this.insertNewline(); return; }
     if (completion.open && ['up', 'down'].includes(key.name) && !key.ctrl && !key.shift && this.historyIndex >= this.history.length) {
       this.completionIndex = (this.completionIndex + (key.name === 'up' ? completion.items.length - 1 : 1)) % completion.items.length;
       this.completionNavigated = true; this.render(); return;
     }
     if (completion.open && key.name === 'tab' && !key.shift) { await this.fillCompletion(); return; }
     if (key.name === 'return') {
+      if (this.submitPending) return;
       await this.submitInput();
     } else if (key.name === 'backspace') { this.backspaceInput(); this.notice = ''; this.historyIndex = this.history.length; this.historyDraft = ''; }
     else if (key.name === 'delete') { this.deleteInput(); this.notice = ''; this.historyIndex = this.history.length; this.historyDraft = ''; }
@@ -687,13 +698,18 @@ export class TerminalUI {
     await this.loadSkillCompletions();
   }
   async submitInput() {
+    if (this.submitPending) return;
     const command = this.input.trim();
     if (!command) return;
+    const submittedAt = Date.now();
+    if (command === this.lastSubmittedText && submittedAt - this.lastSubmittedAt < 250) return;
+    this.submitPending = true;
+    this.lastSubmittedText = command; this.lastSubmittedAt = submittedAt;
     this.setInput('', 0);
     this.history.push(command); this.historyIndex = this.history.length; this.historyDraft = '';
     try { await this.command(command); }
     catch (error) { this.notice = error.message; }
-    finally { this.render(); }
+    finally { this.submitPending = false; this.render(); }
   }
   async command(text) {
     this.notice = '';
@@ -830,7 +846,7 @@ export class TerminalUI {
       this.previewVersion++; this.panel = 'help'; this.scrollTo('top');
       this.preview = [
         '/ 在输入框内显示浅色补全；↑↓ 切候选，Tab 填入，Esc 收起',
-        '补全仅填入文本；Enter 发送，Ctrl+Enter 在输入框内换行。',
+        '补全仅填入文本；Enter 发送，Shift+Enter 在输入框内换行。',
         'F5: 展开 / 折叠当前对话的全部后台过程',
         '/monitor [worker_id]: 在独立窗口监视 worker',
         '/settings: 配置 staff provider/model/effort 等；Ctrl+S 保存，重启生效',
@@ -850,8 +866,10 @@ export class TerminalUI {
         '输入为空时 ←→: 切换对话 / 工作区 / Git；Ctrl+Home / Ctrl+End: 滚动内容',
         'F1: Manager；F2: Worker 对话；F3: 工作区；F4: Git',
         '/manager 或 /workers: 直接进入主界面',
-        'Enter: 发送给 manager；Ctrl+Enter: 换行', '/interrupt [消息]: 停止 manager 当前工作；带消息时优先处理新消息',
-        '/w 消息: 给选中的 worker 发消息', '/pause /resume /cancel /retry: 控制选中的 worker',
+        'Enter: 发送给 manager；Shift+Enter: 换行', '/interrupt [消息]: 停止 manager 当前工作；带消息时优先处理新消息',
+        '/w: 打开 Workers 界面',
+        '/msg worker_id 消息: 向指定 worker 发消息，操作同步给 manager',
+        '/pause /resume /cancel /retry: 控制选中的 worker',
         '/select worker_id: 按 ID 选中 worker 并打开详情',
         '/approval ID: 查看完整审批请求', '/approve ID 或 /deny ID: 批准或拒绝',
         '/question ID: 查看完整问题', '/answer ID 答复: 回答问题',
@@ -863,6 +881,7 @@ export class TerminalUI {
         '/checkpoint [名称]: 创建当前 workspace 与原生会话 checkpoint',
         '/checkpoints: 查看 checkpoint 列表',
         '/turns [actor]: 查看原生会话 turns',
+        '/version: 查看 Last Order、Mission Control、provider 与平台版本',
         '/quote [actor:]#seq 指令: 引用 Manager 或 Worker 历史消息并发送给 Manager',
         '/fork turn_id [actor]: 从原生 turn fork 对话',
         '/revert turn_id --yes [actor]: 删除 turn 及后续历史，不改文件',
@@ -870,6 +889,26 @@ export class TerminalUI {
         '/quit: 只退出 TUI，后台任务继续运行',
         '/shutdown: 关闭 Last Order 和后台任务；Ctrl+C 始终不退出，Ctrl+D 或 /quit 退出 TUI'
       ].join('\n'); return;
+    }
+    if (command === 'version') {
+      if (args) throw new Error('Usage: /version');
+      const info = this.service.client?.info ?? this.service.info ?? {};
+      const staff = role => [
+        this.settings[role],
+        this.settings[role + 'Model'],
+        this.settings[role + 'Effort']
+      ].filter(Boolean).join(' / ') || '-';
+      this.previewVersion++; this.panel = 'help'; this.scrollTo('top');
+      this.preview = [
+        `${PRODUCT_NAME}: ${info.version ?? APP_VERSION}`,
+        `Mission Control: protocol ${info.protocol ?? CONTROL_PROTOCOL_VERSION} · PID ${info.pid ?? '-'} · started ${info.started_at ?? '-'}`,
+        `Manager: ${staff('manager')}`,
+        `Worker: ${staff('worker')}`,
+        `Platform: ${process.platform} ${process.arch} · Node ${process.version}`,
+        `Project: ${info.project_root ?? this.service.git?.root ?? '-'}`,
+        ...(process.env.LO_CODEX_COMMAND ? [`Codex CLI override: ${process.env.LO_CODEX_COMMAND}`] : [])
+      ].join('\n');
+      return;
     }
     if (command === 'approval' || command === 'question') {
       const item = (command === 'approval' ? this.service.approvals : this.service.questions).get(args);
@@ -882,6 +921,20 @@ export class TerminalUI {
     if (command === 'workers') {
       this.showArchivedOnce = args.trim() === 'all';
       return this.showPanel(this.workerPanel);
+    }
+    if (command === 'w') {
+      if (args) throw new Error('Usage: /w');
+      return this.showPanel(this.workerPanel);
+    }
+    if (command === 'msg') {
+      const match = /^(\S+)(?:\s+([\s\S]*))?$/.exec(args);
+      if (!match || !match[2]?.trim()) throw new Error('Usage: /msg worker_id message');
+      const workerRef = match[1];
+      const exact = this.allWorkers.find(worker => worker.id === workerRef);
+      const matches = exact ? [exact] : this.allWorkers.filter(worker => worker.id.startsWith(workerRef));
+      if (!matches.length) throw new Error('Unknown worker');
+      if (matches.length > 1) throw new Error('Ambiguous worker id');
+      return this.service.sendWorkerMessage(matches[0].id, match[2].trim());
     }
     if (command === 'quote') {
       await this.quoteMessage(args);
@@ -908,7 +961,6 @@ export class TerminalUI {
     if (command === 'select') { const index = this.workers.findIndex(w => w.id === args || w.id.startsWith(args)); if (index < 0) throw new Error('Unknown worker'); this.selected = index; this.filePath = ''; return this.showPanel(this.workerPanel); }
     if (command === 'refresh') return this.refresh();
     if (!this.worker) throw new Error('Select a worker first');
-    if (command === 'w') return this.service.sendWorkerMessage(this.worker.id, args);
     if (['pause', 'resume', 'cancel', 'retry'].includes(command)) return this.service.controlWorker(this.worker.id, command, args);
     if (command === 'open') { this.filePath = args; return this.showPanel('files'); }
     if (command === 'back') { this.filePath = this.filePath ? path.dirname(this.filePath) : ''; if (this.filePath === '.') this.filePath = ''; return this.showPanel('files'); }
@@ -1046,7 +1098,7 @@ export class TerminalUI {
       this.preview = Array.isArray(output) ? `Workspace: ${worker.workspace}\nPath: ${this.filePath || '.'}\n\n${output.map(e => (e.directory ? '[dir] ' : e.symlink ? '[link] ' : '      ') + e.name).join('\n')}\n\n/open relative/path 查看文件或目录` : output;
     } catch (error) { if (this.previewVersion === version && this.panel === panel) this.preview = error.message; }
   }
-  conversation(actor, columns) {
+  visibleConversationEvents(actor) {
     if (!actor) return [];
     const manager = this.service.state.manager;
     const active = new Set(manager.active ?? []);
@@ -1063,15 +1115,37 @@ export class TerminalUI {
         if (event.type === 'manager_input') return true;
         if (event.type !== 'message') return false;
         if (['question', 'error', 'warning'].includes(event.data.role)) return true;
-        if (event.data.background) return false;
+        if (event.data.background) return event.data.role === 'assistant';
         return ['user', 'assistant'].includes(event.data.role);
       });
     }
-    return renderConversation(events, actor, columns, {
+    return events;
+  }
+  conversation(actor, columns) {
+    if (!actor) return [];
+    const manager = this.service.state.manager;
+    const events = this.visibleConversationEvents(actor);
+    const expandedActors = [...this.expandedActors].join(',');
+    const expandedGroups = [...this.expandedGroups].join(',');
+    const collapsedGroups = [...this.collapsedGroups].join(',');
+    const signature = [
+      actor, columns, events.length, events.at(-1)?.seq ?? 0,
+      events.at(-1)?.data?.streaming ? events.at(-1)?.data?.text?.length ?? 0 : '',
+      manager.memoryEpoch ?? 0,
+      (manager.active ?? []).join(','),
+      (manager.pending ?? []).map(item => `${item.id}:${item.queued ? 1 : 0}`).join(','),
+      expandedActors, expandedGroups, collapsedGroups
+    ].join('|');
+    const cacheKey = actor + ':' + columns, cached = this.conversationCache.get(cacheKey);
+    if (cached?.signature === signature) return cached.lines;
+    const lines = renderConversation(events, actor, columns, {
       expandedActors: this.expandedActors,
       expandedGroups: this.expandedGroups,
       collapsedGroups: this.collapsedGroups
     });
+    this.conversationCache.set(cacheKey, { signature, lines });
+    while (this.conversationCache.size > 8) this.conversationCache.delete(this.conversationCache.keys().next().value);
+    return lines;
   }
   queuedMessageLines(state, columns, limit = 5) {
     if (!state.managerBusy && !state.manager.hold) return [];
@@ -1107,8 +1181,36 @@ export class TerminalUI {
     }
     return [...visible, ...Array(Math.max(0, height - visible.length)).fill('')];
   }
+  workerListPresentation() {
+    return {
+      title: `Worker 列表 ${this.workers.length ? this.selected + 1 : 0}/${this.workers.length}${this.showArchivedOnce ? ' · 含归档' : ''}${this.workerFocus === 'list' ? ' ·' : ''}`,
+      items: this.workers.map(worker => ({
+        id: worker.id,
+        title: worker.title ?? this.service.state.pipelines[worker.pipelineId]?.title ?? worker.id,
+        status: worker.archivedAt ? '已归档' : statusLabel(worker.status),
+        description: `${worker.provider}${worker.model ? '/' + worker.model : ''} / ${worker.kind}${worker.effort ? ' [' + worker.effort + ']' : ''}`
+      }))
+    };
+  }
+  workerDetailPresentation() {
+    const labels = { chat: '对话', files: '工作区', git: 'Git' };
+    const worker = this.worker;
+    return {
+      title: `Worker 详情 · ${labels[this.panel]}${this.workerFocus === 'detail' ? ' ●' : ''}`,
+      views: Object.entries(labels).map(([panel, label]) => panel === this.panel ? `[${label}]` : ` ${label} `).join(' ') + '  ←→',
+      metadata: worker ? [
+        `${worker.id} · ${statusLabel(worker.status)} · ${worker.provider} / ${worker.kind}`,
+        `任务：${worker.title ?? this.service.state.pipelines[worker.pipelineId]?.title ?? worker.id}${this.panel === 'git' ? ' [' + this.diffMode + ']' : ''}`,
+        ...(worker.notes?.length ? [`备注：${worker.notes.join(' · ')}`] : [])
+      ] : []
+    };
+  }
+  pendingRequestLines() {
+    const state = this.service.state;
+    return [...state.approvals.map(a => `审批 ${a.id} [${a.actor}] · /approval ${a.id} 查看`), ...state.questions.map(q => `问题 ${q.id} [${q.actor}] · /question ${q.id} 查看`)];
+  }
   workerList(state, columns, height, compact = false) {
-    const title = `Worker 列表 ${this.workers.length ? this.selected + 1 : 0}/${this.workers.length}${this.showArchivedOnce ? ' · 含归档' : ''}${this.workerFocus === 'list' ? ' ·' : ''}`;
+    const model = this.workerListPresentation(), title = model.title;
     if (height <= 2) {
       const summary = this.worker ? `${this.worker.archivedAt ? '已归档' : statusLabel(this.worker.status)} ${this.worker.title ?? state.pipelines[this.worker.pipelineId]?.title ?? this.worker.id}` : '尚无 worker';
       return [border(title, columns), border(summary, columns, '╰', '╯')].slice(0, height);
@@ -1120,13 +1222,13 @@ export class TerminalUI {
     const count = Math.max(1, Math.floor((height - 2) / itemHeight));
     const first = Math.max(0, Math.min(this.selected - count + 1, this.workers.length - count));
     for (let i = first; i < Math.min(this.workers.length, first + count); i++) {
-      const w = this.workers[i], title = w.title ?? state.pipelines[w.pipelineId]?.title ?? w.id;
-      const workerStatus = w.archivedAt ? '已归档' : statusLabel(w.status);
+      const w = model.items[i], title = w.title;
+      const workerStatus = w.status;
       const marker = i === this.selected ? '▶' : ' ';
       if (compact) add(`${marker} ${workerStatus} · ${title}`);
       else {
         add(`${marker} ${title}`);
-        add(`  ${workerStatus} · ${w.provider}${w.model ? '/' + w.model : ''} / ${w.kind}${w.effort ? ' [' + w.effort + ']' : ''}`);
+        add(`  ${workerStatus} · ${w.description}`);
         add(`  ${w.id}`);
       }
     }
@@ -1135,16 +1237,16 @@ export class TerminalUI {
   }
   workerView(state, columns, height, rowOffset = 0, colOffset = 0) {
     if (height < 1) return [];
-    const labels = { chat: '对话', files: '工作区', git: 'Git' };
-    const lines = [border(`Worker 详情 · ${labels[this.panel]}${this.workerFocus === 'detail' ? ' ●' : ''}`, columns)];
+    const model = this.workerDetailPresentation();
+    const lines = [border(model.title, columns)];
     const add = text => lines.push('│ ' + fit(text, columns - 4) + ' │');
-    if (height >= 7) add(Object.entries(labels).map(([panel, label]) => panel === this.panel ? `[${label}]` : ` ${label} `).join(' ') + '  ←→');
+    if (height >= 7) add(model.views);
     const worker = this.worker;
     if (worker && height >= 8) {
-      add(`${worker.id} · ${statusLabel(worker.status)} · ${worker.provider} / ${worker.kind}`);
-      add(`任务：${worker.title ?? state.pipelines[worker.pipelineId]?.title ?? worker.id}${this.panel === 'git' ? ' [' + this.diffMode + ']' : ''}`);
+      add(model.metadata[0]);
+      add(model.metadata[1]);
     }
-    if (worker && height >= 9 && worker.notes?.length) add(`备注：${worker.notes.join(' · ')}`);
+    if (worker && height >= 9 && worker.notes?.length) add(model.metadata[2]);
     const contentWidth = columns - 4;
     const content = !worker ? wrap('尚无 worker，Ctrl+Tab 返回 Manager 发送需求。', contentWidth)
       : this.panel === 'chat' ? this.conversation(worker.id, contentWidth)
@@ -1199,7 +1301,7 @@ export class TerminalUI {
     this.lastConversationView = null;
     const add = text => lines.push(fitStyled(text, columns));
     for (const line of this.headerLines(state, columns, rows)) add(line);
-    const pending = [...state.approvals.map(a => `审批 ${a.id} [${a.actor}] · /approval ${a.id} 查看`), ...state.questions.map(q => `问题 ${q.id} [${q.actor}] · /question ${q.id} 查看`)];
+    const pending = this.pendingRequestLines();
     const pendingLines = pending.slice(0, Math.min(5, Math.max(1, rows - 12)));
     const queuedLines = this.queuedMessageLines(state, columns, Math.max(1, Math.min(5, Math.floor(rows / 6))));
     const input = this.inputPresentation(columns, Math.max(1, Math.floor(rows / 3)));
@@ -1235,7 +1337,7 @@ export class TerminalUI {
     }
     for (const line of pendingLines) add(line);
     for (const line of queuedLines) add(line);
-    add(this.notice || this.scrollHint() + ' | Enter → Manager · /w → Worker');
+    add(this.notice || this.scrollHint() + ' | Enter → Manager · Shift+Enter → 换行');
     add('─'.repeat(columns));
     for (const inputLine of input.lines) lines.push(inputLine.plain);
     this.lastFrameLines = lines.slice();

@@ -10,6 +10,7 @@ export class OpenCodeRuntime {
   }
   constructor(context, command) {
     this.context = context; this.abort = new AbortController();
+    this.streamParts = new Map(); this.collectingText = false;
     const password = randomBytes(24).toString('hex');
     this.auth = 'Basic ' + Buffer.from('opencode:' + password).toString('base64');
     this.agent = context.actor === 'manager' ? 'last-order-manager' : 'last-order-worker';
@@ -56,7 +57,10 @@ export class OpenCodeRuntime {
       while ((boundary = buffer.indexOf('\n\n')) >= 0) {
         const block = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
         const data = block.split('\n').filter(x => x.startsWith('data:')).map(x => x.slice(5).trimStart()).join('\n');
-        if (data) this.event(JSON.parse(data)).catch(e => { this.eventError = e; this.abort.abort(); });
+        if (data) {
+          try { await this.event(JSON.parse(data)); }
+          catch (error) { this.eventError = error; this.abort.abort(); }
+        }
       }
     }
     if (!this.abort.signal.aborted) throw new Error('OpenCode event stream disconnected; stopping to preserve approvals');
@@ -84,15 +88,40 @@ export class OpenCodeRuntime {
       const answer = await this.context.emit({ type: 'question', detail: p });
       await this.request('POST', '/question/' + encodeURIComponent(p.id) + '/reply', { answers: (p.questions ?? [null]).map(() => [answer]) });
     }
+    if (e.type === 'message.part.updated' && p.part?.type === 'text') {
+      const id = p.part.id ?? p.part.messageID;
+      const text = String(p.part.text ?? '');
+      const existing = id ? this.streamParts.get(id) : null;
+      if (this.collectingText && id && text && existing?.text !== text) {
+        this.streamParts.set(id, { text });
+        await this.context.emit({ type: 'message', id, text, role: 'assistant', streaming: true });
+      }
+    }
     if (e.type === 'message.part.updated' && p.part?.type === 'tool') await this.context.emit({ type: 'message', role: 'tool', text: `${p.part.tool}: ${p.part.state?.status}` });
   }
   async run(prompt) {
-    let output;
-    try { output = await this.request('POST', '/session/' + this.sessionId + '/message', { agent: this.agent, parts: [{ type: 'text', text: prompt }] }); }
-    catch (error) { throw this.eventError ?? error; }
-    if (this.eventError) throw this.eventError;
-    if (output.info?.error) throw new Error(JSON.stringify(output.info.error));
-    for (const part of output.parts ?? []) if (part.type === 'text') await this.context.emit({ type: 'message', text: part.text });
+    this.streamParts.clear(); this.collectingText = true;
+    try {
+      let output;
+      try { output = await this.request('POST', '/session/' + this.sessionId + '/message', { agent: this.agent, parts: [{ type: 'text', text: prompt }] }); }
+      catch (error) { throw this.eventError ?? error; }
+      if (this.eventError) throw this.eventError;
+      if (output.info?.error) throw new Error(JSON.stringify(output.info.error));
+      const finalParts = new Set();
+      for (const part of output.parts ?? []) {
+        if (part.type !== 'text') continue;
+        if (part.id && this.streamParts.has(part.id)) {
+          finalParts.add(part.id);
+          await this.context.emit({ type: 'message', id: part.id, text: part.text, role: 'assistant', streaming: false });
+        } else await this.context.emit({ type: 'message', text: part.text });
+      }
+      for (const [id, stream] of this.streamParts) {
+        if (finalParts.has(id)) continue;
+        await this.context.emit({ type: 'message', id, text: stream.text, role: 'assistant', streaming: false });
+      }
+    } finally {
+      this.collectingText = false;
+    }
   }
   async stop() { this.abort.abort(); await terminate(this.child); await this.events; }
 }

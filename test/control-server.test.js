@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { access } from 'node:fs/promises';
 import { publishControlServer } from '../src/core/control-server.js';
+import { CONTROL_PROTOCOL_VERSION } from '../src/core/identity.js';
+import { APP_VERSION } from '../src/core/version.js';
 import { temporary, cleanup } from './helpers.js';
 
 test('Mission Control control API authenticates clients and dispatches UI actions', async t => {
@@ -55,7 +57,15 @@ test('Mission Control control API authenticates clients and dispatches UI action
   });
 
   assert.equal((await fetch(published.url + '/health')).status, 401);
-  assert.deepEqual(await (await request('GET', '/health')).json(), { ok: true });
+  assert.deepEqual(await (await request('GET', '/health')).json(), {
+    ok: true, protocol: CONTROL_PROTOCOL_VERSION, version: APP_VERSION
+  });
+  const savedConfig = await (await request('POST', '/config', {
+    config: { manager: 'codex', worker: 'codex', maxWorkers: 2, silenceMinutes: 3 }
+  })).json();
+  assert.equal(savedConfig.restart_required, true, JSON.stringify(savedConfig));
+  assert.equal(savedConfig.config.maxWorkers, 2);
+  assert.equal(savedConfig.config.silenceMs, 180000);
   assert.equal((await (await request('GET', '/status')).json()).snapshot.workers.w1.status, 'running');
   assert.equal((await (await request('GET', '/history?actor=manager&limit=10')).json()).events[0].actor, 'manager');
   assert.equal((await (await request('GET', '/conversation/turns?actor=manager&limit=5')).json()).turns.data[0].id, 'turn-1');

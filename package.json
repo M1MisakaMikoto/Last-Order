@@ -1,6 +1,6 @@
 {
   "name": "last-order",
-  "version": "0.1.0",
+  "version": "0.1.80",
   "private": true,
   "type": "module",
   "description": "Last Order coding-agent workspace coordinated by Mission Control",

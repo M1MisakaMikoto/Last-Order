@@ -3,6 +3,8 @@ docs/research/
 *.log
 coverage/
 .tmp/
+.last-order-workspaces/
+Microsoft/
 vscode-extension/backend/
 vscode-extension/*.vsix
 .env
